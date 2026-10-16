@@ -1,0 +1,137 @@
+[
+  {
+    "id": "dashboard",
+    "title": "Dashboard",
+    "path": "/",
+    "icon": "dashboard"
+  },
+  {
+    "id": "services-menu",
+    "title": "Services",
+    "icon": "wrench",
+    "submenu": [
+      {
+        "id": "all-services",
+        "title": "All Services",
+        "path": "/services"
+      },
+      {
+        "id": "service-categories",
+        "title": "Categories",
+        "path": "/services/categories"
+      },
+      {
+        "id": "service-requests",
+        "title": "Service Requests",
+        "path": "/services/requests",
+        "badge": "0",
+        "badgeColor": "badge-primary"
+      },
+      {
+        "id": "add-service",
+        "title": "Add Service",
+        "path": "/services/new"
+      }
+    ]
+  },
+  {
+    "id": "products-menu",
+    "title": "Products",
+    "icon": "box",
+    "submenu": [
+      {
+        "id": "all-products",
+        "title": "Product Catalog",
+        "path": "/products"
+      },
+      {
+        "id": "inventory",
+        "title": "Inventory & Stock",
+        "path": "/products/inventory"
+      }
+    ]
+  },
+  {
+    "id": "orders-menu",
+    "title": "Orders",
+    "icon": "shopping-cart",
+    "badge": "0",
+    "badgeColor": "badge-secondary",
+    "submenu": [
+      {
+        "id": "all-orders",
+        "title": "All Orders",
+        "path": "/orders"
+      },
+      {
+        "id": "pending-orders",
+        "title": "Pending Orders",
+        "path": "/orders/pending",
+        "badge": "0",
+        "badgeColor": "badge-warning"
+      },
+      {
+        "id": "completed-orders",
+        "title": "Completed Orders",
+        "path": "/orders/completed"
+      }
+    ]
+  },
+  {
+    "id": "technicians-menu",
+    "title": "Technicians",
+    "icon": "user-check",
+    "submenu": [
+      {
+        "id": "technician-list",
+        "title": "All Technicians",
+        "path": "/technicians"
+      },
+      {
+        "id": "technician-assignments",
+        "title": "Task Assignments",
+        "path": "/technicians/assignments"
+      }
+    ]
+  },
+  {
+    "id": "customers",
+    "title": "Customers",
+    "path": "/customers",
+    "icon": "users"
+  },
+  {
+    "id": "reports-menu",
+    "title": "Reports & Analytics",
+    "icon": "chart",
+    "submenu": [
+      {
+        "id": "sales-report",
+        "title": "Sales Analytics",
+        "path": "/reports/sales"
+      },
+      {
+        "id": "service-report",
+        "title": "Service Performance",
+        "path": "/reports/services"
+      }
+    ]
+  },
+  {
+    "id": "settings-menu",
+    "title": "Settings",
+    "icon": "settings",
+    "submenu": [
+      {
+        "id": "general-settings",
+        "title": "General Settings",
+        "path": "/settings/general"
+      },
+      {
+        "id": "store-profile",
+        "title": "Store Profile",
+        "path": "/settings/store"
+      }
+    ]
+  }
+]
