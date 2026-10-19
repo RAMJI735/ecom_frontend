@@ -40,9 +40,9 @@ export default function AuthPage() {
 
       toast.success(res.message || (isLogin ? "Login Successful!" : "Account created successfully!"));
       setTimeout(() => {
-        router.push("/");
-        router.refresh();
-      }, 800);
+        window.location.href = "/";
+      }, 500);
+
     } catch (err) {
       const msg = "An unexpected error occurred. Please try again.";
       setError(msg);

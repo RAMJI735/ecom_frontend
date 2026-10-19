@@ -3,16 +3,17 @@ import { NextResponse } from "next/server";
 export function proxy(request) {
   const { pathname } = request.nextUrl;
   const token = request.cookies.get("token")?.value;
+  const hasToken = Boolean(token && token !== "undefined" && token !== "null");
 
   const isAuthRoute = pathname.startsWith("/auth");
 
   // If user is already logged in and tries to access /auth, redirect to home
-  if (token && isAuthRoute) {
+  if (hasToken && isAuthRoute) {
     return NextResponse.redirect(new URL("/", request.url));
   }
 
   // If user is not logged in and tries to access protected pages, redirect to /auth
-  if (!token && !isAuthRoute) {
+  if (!hasToken && !isAuthRoute) {
     return NextResponse.redirect(new URL("/auth", request.url));
   }
 

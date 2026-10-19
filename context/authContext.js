@@ -10,12 +10,21 @@ const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
+  const [token, setToken] = useState(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
   useEffect(() => {
-    // Read stored user on client mount
+    // Read stored user and token on client mount
     const savedUser = localStorage.getItem("user");
+    const savedToken = localStorage.getItem("token");
+
+    if (savedToken) {
+      setToken(savedToken);
+      // Ensure cookie is in sync for proxy.js server checks
+      document.cookie = `token=${savedToken}; path=/; max-age=604800; SameSite=Lax`;
+    }
+
     if (savedUser) {
       try {
         setUser(JSON.parse(savedUser));
@@ -30,11 +39,19 @@ export const AuthProvider = ({ children }) => {
     try {
       const response = await api.post("/login/user", credentials);
       const result = response.data;
+      const receivedToken = result.token;
 
-      if (response.status === 200 || result.success) {
+      if (response.status === 200 || result.success || receivedToken) {
         const userData = result.data || { email: credentials.email };
         setUser(userData);
         localStorage.setItem("user", JSON.stringify(userData));
+
+        if (receivedToken) {
+          setToken(receivedToken);
+          localStorage.setItem("token", receivedToken);
+          // Set cookie for Next.js proxy.js
+          document.cookie = `token=${receivedToken}; path=/; max-age=604800; SameSite=Lax`;
+        }
 
         return {
           success: true,
@@ -112,11 +129,12 @@ export const AuthProvider = ({ children }) => {
       toast.error(message);
     } finally {
       setUser(null);
+      setToken(null);
       localStorage.removeItem("user");
+      localStorage.removeItem("token");
       // Expire client-side cookie if set
       document.cookie = "token=; path=/; max-age=0; SameSite=Lax";
-      router.push("/auth");
-      router.refresh();
+      window.location.href = "/auth";
     }
   };
 
@@ -124,6 +142,7 @@ export const AuthProvider = ({ children }) => {
     <AuthContext.Provider
       value={{
         user,
+        token,
         loading,
         login,
         register,
