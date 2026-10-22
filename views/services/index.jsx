@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import toast from "react-hot-toast";
 import { serviceApi } from "../../service/serviceApi/serviceApi";
 import { categoryService } from "../../service/category/categoryService";
@@ -16,19 +16,38 @@ export default function ServicesView() {
   const [serviceToEdit, setServiceToEdit] = useState(null);
   const [serviceToDelete, setServiceToDelete] = useState(null);
 
+  // Backend Pagination States
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+
   // Filters
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
 
-  // Pagination
-  const [page, setPage] = useState(1);
-  const [limit, setLimit] = useState(10);
+  // Overview stats across all services
+  const [stats, setStats] = useState({
+    total: 0,
+    active: 0,
+    avgPrice: 0,
+  });
 
-  // Fetch Categories
+  // Debounce search query
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+      setPage(1);
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [searchQuery]);
+
+  // Fetch Categories for dropdown
   const fetchCategories = async () => {
     try {
-      const data = await categoryService.read();
+      const data = await categoryService.read({ all: true });
       if (data) {
         const list = Array.isArray(data)
           ? data
@@ -42,63 +61,120 @@ export default function ServicesView() {
     }
   };
 
-  // Fetch Services
-  const fetchServices = async () => {
+  // Fetch Overview Stats
+  const fetchOverviewStats = async () => {
+    try {
+      const res = await serviceApi.read({ all: true });
+      const allItems = Array.isArray(res) ? res : res?.data || [];
+      const totalCount = allItems.length;
+      const activeCount = allItems.filter((s) => s.status === "active").length;
+      const avgPrice =
+        totalCount > 0
+          ? Math.round(
+              allItems.reduce((acc, curr) => acc + (Number(curr.price) || 0), 0) /
+                totalCount
+            )
+          : 0;
+      setStats({
+        total: totalCount,
+        active: activeCount,
+        avgPrice,
+      });
+    } catch (err) {
+      console.error("Failed to fetch service stats:", err);
+    }
+  };
+
+  // Fetch Paginated Services from Backend
+  const fetchServices = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await serviceApi.read();
-      if (data) {
-        const list = Array.isArray(data)
-          ? data
-          : data.data || data.services || [];
-        setServices(list);
+      const params = {
+        page,
+        limit,
+        search: debouncedSearch.trim() || undefined,
+        category: categoryFilter !== "all" ? categoryFilter : undefined,
+        status: statusFilter !== "all" ? statusFilter : undefined,
+      };
+
+      const res = await serviceApi.read(params);
+
+      if (res && res.success) {
+        setServices(res.data || []);
+        setTotal(res.total !== undefined ? Number(res.total) : (res.data || []).length);
+        setTotalPages(res.totalPages !== undefined ? Number(res.totalPages) : 1);
+      } else if (res) {
+        const items = Array.isArray(res) ? res : res.data || res.services || [];
+        if (res.total !== undefined && res.totalPages !== undefined) {
+          setServices(items);
+          setTotal(Number(res.total));
+          setTotalPages(Number(res.totalPages));
+        } else {
+          // Fallback client-side slicing
+          const totalCount = items.length;
+          const computedPages = Math.max(1, Math.ceil(totalCount / limit));
+          const sliced = items.slice((page - 1) * limit, page * limit);
+          setServices(sliced);
+          setTotal(totalCount);
+          setTotalPages(computedPages);
+        }
       } else {
         setServices([]);
+        setTotal(0);
+        setTotalPages(1);
       }
     } catch (err) {
       console.error("Failed to fetch services from server:", err);
       setServices([]);
+      setTotal(0);
+      setTotalPages(1);
     } finally {
       setLoading(false);
     }
-  };
+  }, [page, limit, debouncedSearch, categoryFilter, statusFilter]);
 
+  // Initial load
   useEffect(() => {
     fetchCategories();
-    fetchServices();
+    fetchOverviewStats();
   }, []);
+
+  // Fetch services when page/limit/filters change
+  useEffect(() => {
+    fetchServices();
+  }, [fetchServices]);
+
+  // Handlers
+  const handleCategoryChange = (val) => {
+    setCategoryFilter(val);
+    setPage(1);
+  };
+
+  const handleStatusChange = (val) => {
+    setStatusFilter(val);
+    setPage(1);
+  };
+
+  const handleLimitChange = (newLimit) => {
+    setLimit(newLimit);
+    setPage(1);
+  };
 
   // Save (Create or Update)
   const handleSave = async (formData, id) => {
     setModalLoading(true);
     try {
       if (id) {
-        // Update existing service
-        const res = await serviceApi.update(id, formData);
-        const updated = res?.data || res;
-        if (updated) {
-          setServices((prev) =>
-            prev.map((s) => ((s._id || s.id) === id ? { ...s, ...formData } : s))
-          );
-        } else {
-          await fetchServices();
-        }
+        await serviceApi.update(id, formData);
         toast.success("Service package updated successfully!");
       } else {
-        // Create new service
-        const res = await serviceApi.create(formData);
-        const created = res?.data || res;
-
-        if (created && typeof created === "object" && (created._id || created.id)) {
-          setServices((prev) => [created, ...prev]);
-        } else {
-          await fetchServices();
-        }
+        await serviceApi.create(formData);
         toast.success("Service package created successfully!");
       }
 
       setIsModalOpen(false);
       setServiceToEdit(null);
+      await Promise.all([fetchServices(), fetchOverviewStats()]);
     } catch (err) {
       console.error("Save service error:", err);
       const msg = err.response?.data?.message || "Failed to save service. Check backend connection.";
@@ -115,13 +191,19 @@ export default function ServicesView() {
 
     try {
       await serviceApi.delete(id);
-      setServices((prev) => prev.filter((s) => (s._id || s.id) !== id));
       toast.success("Service removed from catalog");
+      setServiceToDelete(null);
+
+      // If last item on page deleted, go back one page
+      if (services.length === 1 && page > 1) {
+        setPage((prev) => prev - 1);
+      } else {
+        await Promise.all([fetchServices(), fetchOverviewStats()]);
+      }
     } catch (err) {
       console.error("Delete service error:", err);
       const msg = err.response?.data?.message || "Failed to delete service";
       toast.error(msg);
-    } finally {
       setServiceToDelete(null);
     }
   };
@@ -137,58 +219,12 @@ export default function ServicesView() {
         prev.map((s) => ((s._id || s.id) === id ? { ...s, status: newStatus } : s))
       );
       toast.success(`Service marked as ${newStatus}`);
+      fetchOverviewStats();
     } catch (err) {
       console.error("Toggle status error:", err);
       toast.error("Failed to update status");
     }
   };
-
-  // Filtered Services
-  const filteredServices = useMemo(() => {
-    return services.filter((item) => {
-      const title = (item.serviceName || item.name || "").toLowerCase();
-      const brand = (item.brand || "").toLowerCase();
-      const model = (item.model || "").toLowerCase();
-      const desc = (item.description || "").toLowerCase();
-      const query = searchQuery.toLowerCase().trim();
-
-      const matchesSearch =
-        !query ||
-        title.includes(query) ||
-        brand.includes(query) ||
-        model.includes(query) ||
-        desc.includes(query);
-
-      const catId = typeof item.category === "object" ? item.category?._id || item.category?.id : item.category;
-      const matchesCategory =
-        categoryFilter === "all" || catId === categoryFilter;
-
-      const matchesStatus =
-        statusFilter === "all" || item.status === statusFilter;
-
-      return matchesSearch && matchesCategory && matchesStatus;
-    });
-  }, [services, searchQuery, categoryFilter, statusFilter]);
-
-  const total = filteredServices.length;
-  const totalPages = Math.max(1, Math.ceil(total / limit));
-  const paginatedServices = useMemo(() => {
-    return filteredServices.slice((page - 1) * limit, page * limit);
-  }, [filteredServices, page, limit]);
-
-  // Statistics
-  const stats = useMemo(() => {
-    const total = services.length;
-    const active = services.filter((s) => s.status === "active").length;
-    const avgPrice =
-      total > 0
-        ? Math.round(
-            services.reduce((acc, curr) => acc + (Number(curr.price) || 0), 0) /
-              total
-          )
-        : 0;
-    return { total, active, avgPrice };
-  }, [services]);
 
   return (
     <div className="space-y-6">
@@ -272,10 +308,7 @@ export default function ServicesView() {
               type="text"
               placeholder="Search by service name, brand, model or description..."
               value={searchQuery}
-              onChange={(e) => {
-                setSearchQuery(e.target.value);
-                setPage(1);
-              }}
+              onChange={(e) => setSearchQuery(e.target.value)}
               className="input input-bordered input-sm w-full pl-9 focus:input-primary"
             />
           </div>
@@ -285,10 +318,7 @@ export default function ServicesView() {
             {/* Category Filter */}
             <select
               value={categoryFilter}
-              onChange={(e) => {
-                setCategoryFilter(e.target.value);
-                setPage(1);
-              }}
+              onChange={(e) => handleCategoryChange(e.target.value)}
               className="select select-bordered select-sm focus:select-primary"
             >
               <option value="all">All Categories</option>
@@ -302,10 +332,7 @@ export default function ServicesView() {
             {/* Status Filter */}
             <select
               value={statusFilter}
-              onChange={(e) => {
-                setStatusFilter(e.target.value);
-                setPage(1);
-              }}
+              onChange={(e) => handleStatusChange(e.target.value)}
               className="select select-bordered select-sm focus:select-primary"
             >
               <option value="all">All Status</option>
@@ -316,6 +343,7 @@ export default function ServicesView() {
             <button
               onClick={() => {
                 fetchCategories();
+                fetchOverviewStats();
                 fetchServices();
               }}
               title="Refresh services"
@@ -329,7 +357,7 @@ export default function ServicesView() {
 
       {/* Services Table */}
       <ServiceTable
-        services={paginatedServices}
+        services={services}
         categories={categories}
         loading={loading}
         total={total}
@@ -337,10 +365,7 @@ export default function ServicesView() {
         limit={limit}
         totalPages={totalPages}
         onPageChange={setPage}
-        onLimitChange={(l) => {
-          setLimit(l);
-          setPage(1);
-        }}
+        onLimitChange={handleLimitChange}
         onEdit={(item) => {
           setServiceToEdit(item);
           setIsModalOpen(true);

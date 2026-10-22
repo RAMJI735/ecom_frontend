@@ -15,8 +15,7 @@ export const orderService = {
   // Read orders with optional filtering & pagination
   read: async (params = {}) => {
     try {
-      const queryParams = { all: true, ...params };
-      const response = await api.get("/api/orders", { params: queryParams });
+      const response = await api.get("/api/orders", { params });
       return response.data;
     } catch (error) {
       console.error("orderService.read error:", error);
@@ -26,7 +25,7 @@ export const orderService = {
 
   // Alias for read()
   getAll: async (params = {}) => {
-    return orderService.read(params);
+    return orderService.read({ all: true, ...params });
   },
 
   // Get single order by Mongo _id or friendly orderNumber (e.g. VOLT-20261015-8491)

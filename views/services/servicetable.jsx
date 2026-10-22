@@ -87,7 +87,7 @@ export default function ServiceTable({
     );
   }
 
-  if (services.length === 0) {
+  if (total === 0 && services.length === 0) {
     return (
       <div className="card bg-base-100 border border-base-300 shadow-sm p-12 text-center">
         <div className="max-w-md mx-auto flex flex-col items-center">
@@ -121,13 +121,24 @@ export default function ServiceTable({
             </tr>
           </thead>
           <tbody className="divide-y divide-base-200">
-            {services.map((item) => {
-              const id = item._id || item.id;
-              const title = item.serviceName || item.name || "Untitled Service";
-              const catName = getCategoryName(item.category);
-              const catIcon = getCategoryIcon(item.category);
-              const isActive = item.status === "active";
-              const duration = item.estimated_time || item.estimatedTime;
+            {services.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="text-center py-12 text-base-content/60">
+                  <div className="flex flex-col items-center justify-center max-w-sm mx-auto">
+                    <span className="text-2xl mb-1">🔍</span>
+                    <span className="font-semibold text-sm text-base-content">No Services On This Page</span>
+                    <span className="text-xs text-base-content/60 mt-0.5">Try navigating to previous pages or resetting filters.</span>
+                  </div>
+                </td>
+              </tr>
+            ) : (
+              services.map((item) => {
+                const id = item._id || item.id;
+                const title = item.serviceName || item.name || "Untitled Service";
+                const catName = getCategoryName(item.category);
+                const catIcon = getCategoryIcon(item.category);
+                const isActive = item.status === "active";
+                const duration = item.estimated_time || item.estimatedTime;
 
               return (
                 <tr key={id} className="hover:bg-base-200/30 transition">
@@ -263,7 +274,7 @@ export default function ServiceTable({
                   </td>
                 </tr>
               );
-            })}
+            }))}
           </tbody>
         </table>
       </div>

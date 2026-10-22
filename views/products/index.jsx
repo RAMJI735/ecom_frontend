@@ -113,9 +113,19 @@ export default function ProductsView() {
 
       if (res) {
         const items = Array.isArray(res) ? res : res.data || res.products || [];
-        setProducts(items);
-        setTotal(res.total !== undefined ? Number(res.total) : items.length);
-        setTotalPages(res.totalPages !== undefined ? Number(res.totalPages) : 1);
+        if (res.total !== undefined && res.totalPages !== undefined) {
+          setProducts(items);
+          setTotal(Number(res.total));
+          setTotalPages(Number(res.totalPages));
+        } else {
+          // Fallback client-side pagination if backend returned all items without pagination metadata
+          const totalCount = items.length;
+          const computedTotalPages = Math.max(1, Math.ceil(totalCount / limit));
+          const paginatedItems = items.slice((page - 1) * limit, page * limit);
+          setProducts(paginatedItems);
+          setTotal(totalCount);
+          setTotalPages(computedTotalPages);
+        }
       } else {
         setProducts([]);
         setTotal(0);

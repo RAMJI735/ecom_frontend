@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import toast from "react-hot-toast";
 import { categoryService } from "../../service/category/categoryService";
 import AddModal from "./addmodal";
@@ -14,70 +14,125 @@ export default function CategoriesView() {
   const [categoryToEdit, setCategoryToEdit] = useState(null);
   const [categoryToDelete, setCategoryToDelete] = useState(null);
 
-  // Filters
-  const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
-
-  // Pagination
+  // Backend Pagination States
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
 
-  // Fetch categories from backend
-  const fetchCategories = async () => {
+  // Filters
+  const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+
+  // Overview stats across all categories
+  const [stats, setStats] = useState({
+    total: 0,
+    active: 0,
+    inactive: 0,
+  });
+
+  // Debounce search query
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+      setPage(1);
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [searchQuery]);
+
+  // Fetch overview stats
+  const fetchOverviewStats = async () => {
+    try {
+      const data = await categoryService.read({ all: true });
+      const list = Array.isArray(data)
+        ? data
+        : data?.data || data?.categories || [];
+      const totalCount = list.length;
+      const activeCount = list.filter((c) => c.status === "active").length;
+      const inactiveCount = list.filter((c) => c.status === "inactive").length;
+      setStats({
+        total: totalCount,
+        active: activeCount,
+        inactive: inactiveCount,
+      });
+    } catch (err) {
+      console.error("Failed to fetch category stats:", err);
+    }
+  };
+
+  // Fetch paginated categories from backend
+  const fetchCategories = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await categoryService.read();
-      if (data) {
-        const list = Array.isArray(data)
-          ? data
-          : data.data || data.categories || [];
-        setCategories(list);
+      const params = {
+        page,
+        limit,
+        search: debouncedSearch.trim() || undefined,
+        status: statusFilter !== "all" ? statusFilter : undefined,
+      };
+
+      const res = await categoryService.read(params);
+
+      if (res && res.success) {
+        setCategories(res.data || []);
+        setTotal(res.total !== undefined ? Number(res.total) : (res.data || []).length);
+        setTotalPages(res.totalPages !== undefined ? Number(res.totalPages) : 1);
+      } else if (res) {
+        const items = Array.isArray(res) ? res : res.data || res.categories || [];
+        if (res.total !== undefined && res.totalPages !== undefined) {
+          setCategories(items);
+          setTotal(Number(res.total));
+          setTotalPages(Number(res.totalPages));
+        } else {
+          // Fallback client-side slicing
+          const totalCount = items.length;
+          const computedPages = Math.max(1, Math.ceil(totalCount / limit));
+          const sliced = items.slice((page - 1) * limit, page * limit);
+          setCategories(sliced);
+          setTotal(totalCount);
+          setTotalPages(computedPages);
+        }
       } else {
         setCategories([]);
+        setTotal(0);
+        setTotalPages(1);
       }
     } catch (err) {
       console.error("Failed to fetch categories from server:", err);
       setCategories([]);
+      setTotal(0);
+      setTotalPages(1);
     } finally {
       setLoading(false);
     }
-  };
+  }, [page, limit, debouncedSearch, statusFilter]);
 
+  // Initial load
+  useEffect(() => {
+    fetchOverviewStats();
+  }, []);
+
+  // Fetch categories when page/limit/filters change
   useEffect(() => {
     fetchCategories();
-  }, []);
+  }, [fetchCategories]);
 
   // Save (Create or Update)
   const handleSave = async (formData, id) => {
     setModalLoading(true);
     try {
       if (id) {
-        // Update existing category
-        const res = await categoryService.update(id, formData);
-        const updated = res?.data || res;
-        if (updated) {
-          setCategories((prev) =>
-            prev.map((c) => ((c._id || c.id) === id ? { ...c, ...formData } : c))
-          );
-        } else {
-          await fetchCategories();
-        }
+        await categoryService.update(id, formData);
         toast.success("Category updated successfully!");
       } else {
-        // Create new category
-        const res = await categoryService.create(formData);
-        const created = res?.data || res;
-
-        if (created && typeof created === "object" && (created._id || created.id)) {
-          setCategories((prev) => [created, ...prev]);
-        } else {
-          await fetchCategories();
-        }
+        await categoryService.create(formData);
         toast.success("Category created successfully!");
       }
 
       setIsModalOpen(false);
       setCategoryToEdit(null);
+      await Promise.all([fetchCategories(), fetchOverviewStats()]);
     } catch (err) {
       console.error("Save category error:", err);
       const msg = err.response?.data?.message || "Failed to save category. Check backend connection.";
@@ -94,13 +149,19 @@ export default function CategoriesView() {
 
     try {
       await categoryService.delete(id);
-      setCategories((prev) => prev.filter((c) => (c._id || c.id) !== id));
       toast.success("Category deleted successfully!");
+      setCategoryToDelete(null);
+
+      // If last item on page deleted, go back one page
+      if (categories.length === 1 && page > 1) {
+        setPage((prev) => prev - 1);
+      } else {
+        await Promise.all([fetchCategories(), fetchOverviewStats()]);
+      }
     } catch (err) {
       console.error("Delete category error:", err);
       const msg = err.response?.data?.message || "Failed to delete category";
       toast.error(msg);
-    } finally {
       setCategoryToDelete(null);
     }
   };
@@ -116,40 +177,12 @@ export default function CategoriesView() {
         prev.map((c) => ((c._id || c.id) === id ? { ...c, status: newStatus } : c))
       );
       toast.success(`Category marked as ${newStatus}`);
+      fetchOverviewStats();
     } catch (err) {
       console.error("Toggle status error:", err);
       toast.error("Failed to update status");
     }
   };
-
-  // Filtered categories
-  const filteredCategories = useMemo(() => {
-    return categories.filter((cat) => {
-      const name = (cat.categoryName || cat.name || "").toLowerCase();
-      const desc = (cat.description || "").toLowerCase();
-      const query = searchQuery.toLowerCase().trim();
-
-      const matchesSearch = !query || name.includes(query) || desc.includes(query);
-      const matchesStatus =
-        statusFilter === "all" || cat.status === statusFilter;
-
-      return matchesSearch && matchesStatus;
-    });
-  }, [categories, searchQuery, statusFilter]);
-
-  const total = filteredCategories.length;
-  const totalPages = Math.max(1, Math.ceil(total / limit));
-  const paginatedCategories = useMemo(() => {
-    return filteredCategories.slice((page - 1) * limit, page * limit);
-  }, [filteredCategories, page, limit]);
-
-  // Statistics
-  const stats = useMemo(() => {
-    const total = categories.length;
-    const active = categories.filter((c) => c.status === "active").length;
-    const inactive = categories.filter((c) => c.status === "inactive").length;
-    return { total, active, inactive };
-  }, [categories]);
 
   return (
     <div className="space-y-6">
@@ -231,10 +264,7 @@ export default function CategoriesView() {
               type="text"
               placeholder="Search category name or description..."
               value={searchQuery}
-              onChange={(e) => {
-                setSearchQuery(e.target.value);
-                setPage(1);
-              }}
+              onChange={(e) => setSearchQuery(e.target.value)}
               className="input input-bordered input-sm w-full pl-9 focus:input-primary"
             />
           </div>
@@ -256,7 +286,10 @@ export default function CategoriesView() {
             </select>
 
             <button
-              onClick={fetchCategories}
+              onClick={() => {
+                fetchOverviewStats();
+                fetchCategories();
+              }}
               title="Refresh list"
               className="btn btn-sm btn-square btn-ghost border border-base-300"
             >
@@ -268,7 +301,7 @@ export default function CategoriesView() {
 
       {/* Category Table */}
       <CategoryTable
-        categories={paginatedCategories}
+        categories={categories}
         loading={loading}
         total={total}
         page={page}

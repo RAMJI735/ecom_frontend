@@ -41,10 +41,21 @@ export default function ServiceRequestsPage() {
         search: searchQuery.trim() || undefined,
       };
       const res = await taskService.getAll(params);
-      if (res && res.success) {
-        setRequests(res.data || []);
-        setTotal(res.total || 0);
-        setTotalPages(res.totalPages || 1);
+      const list = res?.data || (Array.isArray(res) ? res : []);
+      if (res && (res.success || Array.isArray(res) || res.data)) {
+        if (res.total !== undefined && res.totalPages !== undefined) {
+          setRequests(list);
+          setTotal(Number(res.total));
+          setTotalPages(Number(res.totalPages));
+        } else {
+          // Fallback client-side pagination
+          const totalCount = list.length;
+          const computedTotalPages = Math.max(1, Math.ceil(totalCount / limit));
+          const paginated = list.slice((page - 1) * limit, page * limit);
+          setRequests(paginated);
+          setTotal(totalCount);
+          setTotalPages(computedTotalPages);
+        }
       } else {
         setRequests([]);
         setTotal(0);

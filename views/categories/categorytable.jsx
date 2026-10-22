@@ -65,7 +65,7 @@ export default function CategoryTable({
     );
   }
 
-  if (categories.length === 0) {
+  if (total === 0 && categories.length === 0) {
     return (
       <div className="card bg-base-100 border border-base-300 shadow-sm p-12 text-center">
         <div className="max-w-md mx-auto flex flex-col items-center">
@@ -99,10 +99,21 @@ export default function CategoryTable({
             </tr>
           </thead>
           <tbody className="divide-y divide-base-200">
-            {categories.map((cat) => {
-              const id = cat._id || cat.id;
-              const name = cat.categoryName || cat.name || "Untitled Category";
-              const isActive = cat.status === "active";
+            {categories.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="text-center py-12 text-base-content/60">
+                  <div className="flex flex-col items-center justify-center max-w-sm mx-auto">
+                    <span className="text-2xl mb-1">📂</span>
+                    <span className="font-semibold text-sm text-base-content">No Categories On This Page</span>
+                    <span className="text-xs text-base-content/60 mt-0.5">Try navigating to previous pages or resetting filters.</span>
+                  </div>
+                </td>
+              </tr>
+            ) : (
+              categories.map((cat) => {
+                const id = cat._id || cat.id;
+                const name = cat.categoryName || cat.name || "Untitled Category";
+                const isActive = cat.status === "active";
               const createdDate = cat.createdAt
                 ? new Date(cat.createdAt).toLocaleDateString("en-US", {
                     month: "short",
@@ -210,7 +221,7 @@ export default function CategoryTable({
                   </td>
                 </tr>
               );
-            })}
+            }))}
           </tbody>
         </table>
       </div>

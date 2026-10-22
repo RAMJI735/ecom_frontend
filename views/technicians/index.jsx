@@ -36,10 +36,21 @@ export default function TechniciansView() {
         search: searchQuery.trim() || undefined,
       };
       const res = await technicianService.getAll(params);
-      if (res && res.success) {
-        setTechnicians(res.data || []);
-        setTotal(res.total || 0);
-        setTotalPages(res.totalPages || 1);
+      const list = res?.data || (Array.isArray(res) ? res : []);
+      if (res && (res.success || Array.isArray(res) || res.data)) {
+        if (res.total !== undefined && res.totalPages !== undefined) {
+          setTechnicians(list);
+          setTotal(Number(res.total));
+          setTotalPages(Number(res.totalPages));
+        } else {
+          // Fallback client-side pagination
+          const totalCount = list.length;
+          const computedTotalPages = Math.max(1, Math.ceil(totalCount / limit));
+          const paginated = list.slice((page - 1) * limit, page * limit);
+          setTechnicians(paginated);
+          setTotal(totalCount);
+          setTotalPages(computedTotalPages);
+        }
       } else {
         setTechnicians([]);
         setTotal(0);

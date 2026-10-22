@@ -125,11 +125,21 @@ export default function OrdersView({
     });
   }, [orders, statusFilter, searchQuery]);
 
+  const totalPages = Math.max(1, Math.ceil(filteredOrders.length / limit));
+
+  // Reset page to 1 if current page is out of bounds after filtering
+  useEffect(() => {
+    if (page > totalPages) {
+      setPage(1);
+    }
+  }, [page, totalPages]);
+
   // Paginated list
   const paginatedOrders = useMemo(() => {
-    const start = (page - 1) * limit;
+    const safePage = Math.min(page, totalPages);
+    const start = (safePage - 1) * limit;
     return filteredOrders.slice(start, start + limit);
-  }, [filteredOrders, page, limit]);
+  }, [filteredOrders, page, totalPages, limit]);
 
   // Handle status update
   const handleUpdateStatus = async (orderId, newStatus, note = "") => {
@@ -560,6 +570,7 @@ export default function OrdersView({
             page={page}
             total={filteredOrders.length}
             limit={limit}
+            totalPages={totalPages}
             onPageChange={setPage}
             onLimitChange={(l) => {
               setLimit(l);

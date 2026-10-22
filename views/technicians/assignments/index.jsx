@@ -74,10 +74,21 @@ export default function TechnicianAssignmentsView() {
       };
 
       const res = await taskService.getAll(params);
-      if (res && res.success) {
-        setTasks(res.data || []);
-        setTotal(res.total || 0);
-        setTotalPages(res.totalPages || 1);
+      const list = res?.data || (Array.isArray(res) ? res : []);
+      if (res && (res.success || Array.isArray(res) || res.data)) {
+        if (res.total !== undefined && res.totalPages !== undefined) {
+          setTasks(list);
+          setTotal(Number(res.total));
+          setTotalPages(Number(res.totalPages));
+        } else {
+          // Fallback client-side pagination
+          const totalCount = list.length;
+          const computedTotalPages = Math.max(1, Math.ceil(totalCount / limit));
+          const paginated = list.slice((page - 1) * limit, page * limit);
+          setTasks(paginated);
+          setTotal(totalCount);
+          setTotalPages(computedTotalPages);
+        }
       } else {
         setTasks([]);
         setTotal(0);
