@@ -26,11 +26,6 @@
         "path": "/services/requests",
         "badge": "0",
         "badgeColor": "badge-primary"
-      },
-      {
-        "id": "add-service",
-        "title": "Add Service",
-        "path": "/services/new"
       }
     ]
   },

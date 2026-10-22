@@ -7,6 +7,7 @@ import { useAuth } from "@context/authContext";
 import ThemeToggle from "@/app/(dashboard)/theme/page";
 import { orderService } from "@service/order/orderService";
 import { useState, useEffect } from "react";
+import { FaToggleOn, FaToggleOff, FaBars } from "react-icons/fa";
 
 function renderIcon(iconName) {
   const iconProps = {
@@ -98,6 +99,14 @@ export default function Sidebar({ items = navbarData }) {
   const { user, logout } = useAuth();
   const [navItems, setNavItems] = useState(items);
 
+  const [smlgth, setsmlgth] = useState(0);
+
+  useEffect(() => {
+    setsmlgth(window.innerWidth)
+    window.addEventListener("resize", () => {
+      setsmlgth(window.innerWidth)
+    })
+  }, [])
   useEffect(() => {
     orderService
       .getStats()
@@ -122,7 +131,7 @@ export default function Sidebar({ items = navbarData }) {
           })
         );
       })
-      .catch(() => {});
+      .catch(() => { });
   }, [pathname]);
 
   const isLinkActive = (path) => {
@@ -136,140 +145,171 @@ export default function Sidebar({ items = navbarData }) {
     return submenu.some((subItem) => isLinkActive(subItem.path));
   };
 
+
+  const [toggleSide, setToggleSide] = useState(false)
+  const toggleFun = () => {
+    setToggleSide(!toggleSide)
+  }
+
+
   return (
-    <aside className="w-64 h-screen shrink-0 bg-base-200 border-r border-base-300 flex flex-col justify-between select-none sticky top-0 overflow-hidden">
-      {/* Upper Section: Brand + Navigation */}
-      <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
-        {/* Brand Header */}
-        <div className="p-4 border-b border-base-300 flex items-center gap-3 shrink-0">
-          <div className="w-10 h-10 rounded-xl bg-primary text-primary-content flex items-center justify-center shadow-md shadow-primary/20 shrink-0">
-            <svg
-              className="w-6 h-6"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.2"
-              viewBox="0 0 24 24"
-            >
-              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-            </svg>
-          </div>
-          <div className="flex-1 min-w-0">
-            <h2 className="font-bold text-base leading-tight tracking-tight text-base-content truncate">
-              ElectroCare
-            </h2>
-            <span className="text-xs text-base-content/60 font-medium truncate block">
-              E-Commerce & Service
-            </span>
-          </div>
-          <ThemeToggle />
+    <div
+      className={`
+    fixed z-10 top-0 left-0 h-screen w-60
+    transition-transform duration-300
+    md:relative md:translate-x-0
+    ${toggleSide ? "translate-x-0" : "-translate-x-full"}
+  `}
+    >
+
+
+      <aside className="w-64 h-screen shrink-0 bg-base-200 border-r border-base-300 flex flex-col justify-between select-none sticky top-0 overflow-hidden">
+        {/* Upper Section: Brand + Navigation */}
+
+        <div className="p-2">
+          <button
+            onClick={toggleFun}
+            className="w-full h-10 bg-indigo-700 hover:bg-indigo-800
+               text-white rounded-md flex items-center justify-center"
+            aria-label="Toggle sidebar"
+          >
+            <FaBars size={22} />
+          </button>
         </div>
+        <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+          {/* Brand Header */}
+          <div className="p-4 border-b border-base-300 flex items-center gap-3 shrink-0">
+            <div className="w-10 h-10 rounded-xl bg-primary text-primary-content flex items-center justify-center shadow-md shadow-primary/20 shrink-0">
+              <svg
+                className="w-6 h-6"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.2"
+                viewBox="0 0 24 24"
+              >
+                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+              </svg>
+            </div>
+            <div className="flex-1 min-w-0">
+              <h2 className="font-bold text-base leading-tight tracking-tight text-base-content truncate">
+                ElectroCare
+              </h2>
+              <span className="text-xs text-base-content/60 font-medium truncate block">
+                E-Commerce & Service
+              </span>
+            </div>
+            <ThemeToggle />
+          </div>
 
-        {/* DaisyUI Menu Navigation */}
-        <div className="p-2 flex-1 overflow-y-auto [scrollbar-width:thin]">
-          <ul className="menu menu-md w-full gap-1">
-            {navItems.map((item) => {
-              const hasSubmenu = Array.isArray(item.submenu) && item.submenu.length > 0;
-              const hasActiveChild = hasSubmenu && isSubmenuActive(item.submenu);
-              const isCurrentActive = isLinkActive(item.path);
+          {/* DaisyUI Menu Navigation */}
+          <div className="p-2 flex-1 overflow-y-auto [scrollbar-width:thin]">
+            <ul className="menu menu-md w-full gap-1">
+              {navItems.map((item) => {
+                const hasSubmenu = Array.isArray(item.submenu) && item.submenu.length > 0;
+                const hasActiveChild = hasSubmenu && isSubmenuActive(item.submenu);
+                const isCurrentActive = isLinkActive(item.path);
 
-              if (hasSubmenu) {
+                if (hasSubmenu) {
+                  return (
+                    <li key={item.id || item.title}>
+                      <details open={hasActiveChild}>
+                        <summary className="font-medium hover:bg-base-300/60 transition-colors">
+                          {renderIcon(item.icon)}
+                          <span className="flex-1 truncate">{item.title}</span>
+                          {item.badge && (
+                            <span
+                              className={`badge badge-sm ${item.badgeColor || "badge-neutral"
+                                }`}
+                            >
+                              {item.badge}
+                            </span>
+                          )}
+                        </summary>
+                        <ul className="before:bg-base-300">
+                          {item.submenu.map((subItem) => {
+                            const isChildActive = isLinkActive(subItem.path);
+                            return (
+                              <li key={subItem.id || subItem.path}>
+                                <Link
+                                  href={subItem.path || "#"}
+                                  onClick={() => { if (smlgth <= 600) toggleFun() }}
+                                  className={`text-sm ${isChildActive ? "active font-medium" : ""
+                                    }`}
+                                >
+                                  {subItem.icon && renderIcon(subItem.icon)}
+                                  <span className="flex-1 truncate">{subItem.title}</span>
+                                  {subItem.badge && (
+                                    <span
+                                      className={`badge badge-sm ${subItem.badgeColor || "badge-neutral"
+                                        }`}
+                                    >
+                                      {subItem.badge}
+                                    </span>
+                                  )}
+                                </Link>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      </details>
+                    </li>
+                  );
+                }
+
+                // Top-level item without submenu
                 return (
-                  <li key={item.id || item.title}>
-                    <details open={hasActiveChild}>
-                      <summary className="font-medium hover:bg-base-300/60 transition-colors">
-                        {renderIcon(item.icon)}
-                        <span className="flex-1 truncate">{item.title}</span>
-                        {item.badge && (
-                          <span
-                            className={`badge badge-sm ${item.badgeColor || "badge-neutral"
-                              }`}
-                          >
-                            {item.badge}
-                          </span>
-                        )}
-                      </summary>
-                      <ul className="before:bg-base-300">
-                        {item.submenu.map((subItem) => {
-                          const isChildActive = isLinkActive(subItem.path);
-                          return (
-                            <li key={subItem.id || subItem.path}>
-                              <Link
-                                href={subItem.path || "#"}
-                                className={`text-sm ${isChildActive ? "active font-medium" : ""
-                                  }`}
-                              >
-                                {subItem.icon && renderIcon(subItem.icon)}
-                                <span className="flex-1 truncate">{subItem.title}</span>
-                                {subItem.badge && (
-                                  <span
-                                    className={`badge badge-sm ${subItem.badgeColor || "badge-neutral"
-                                      }`}
-                                  >
-                                    {subItem.badge}
-                                  </span>
-                                )}
-                              </Link>
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    </details>
+                  <li key={item.id || item.path || item.title}>
+                    <Link
+                      href={item.path || "#"}
+                      className={`font-medium ${isCurrentActive ? "active" : ""}`}
+                    >
+                      {renderIcon(item.icon)}
+                      <span className="flex-1 truncate">{item.title}</span>
+                      {item.badge && (
+                        <span
+                          className={`badge badge-sm ${item.badgeColor || "badge-neutral"
+                            }`}
+                        >
+                          {item.badge}
+                        </span>
+                      )}
+                    </Link>
                   </li>
                 );
-              }
-
-              // Top-level item without submenu
-              return (
-                <li key={item.id || item.path || item.title}>
-                  <Link
-                    href={item.path || "#"}
-                    className={`font-medium ${isCurrentActive ? "active" : ""}`}
-                  >
-                    {renderIcon(item.icon)}
-                    <span className="flex-1 truncate">{item.title}</span>
-                    {item.badge && (
-                      <span
-                        className={`badge badge-sm ${item.badgeColor || "badge-neutral"
-                          }`}
-                      >
-                        {item.badge}
-                      </span>
-                    )}
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
+              })}
+            </ul>
+          </div>
         </div>
-      </div>
 
-      {/* Footer Profile / Status */}
-      <div className="p-3 border-t border-base-300 m-2 rounded-xl bg-base-100 flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-2.5 overflow-hidden">
-          <div className="avatar online placeholder shrink-0">
-            <div className="bg-primary text-primary-content rounded-full w-8 h-8 text-xs font-semibold uppercase">
-              {user?.name ? user.name.slice(0, 2) : user?.email ? user.email.slice(0, 2) : "EC"}
+
+        {/* Footer Profile / Status */}
+        <div className="p-3 border-t border-base-300 m-2 rounded-xl bg-base-100 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-2.5 overflow-hidden">
+            <div className="avatar online placeholder shrink-0">
+              <div className="bg-primary text-primary-content rounded-full w-8 h-8 text-xs font-semibold uppercase">
+                {user?.name ? user.name.slice(0, 2) : user?.email ? user.email.slice(0, 2) : "EC"}
+              </div>
+            </div>
+            <div className="leading-tight truncate">
+              <p className="text-xs font-semibold text-base-content truncate">
+                {user?.name || user?.email?.split("@")[0] || "User"}
+              </p>
+              <p className="text-[11px] text-base-content/60 truncate">
+                {user?.email || "Online"}
+              </p>
             </div>
           </div>
-          <div className="leading-tight truncate">
-            <p className="text-xs font-semibold text-base-content truncate">
-              {user?.name || user?.email?.split("@")[0] || "User"}
-            </p>
-            <p className="text-[11px] text-base-content/60 truncate">
-              {user?.email || "Online"}
-            </p>
-          </div>
+          <button
+            onClick={logout}
+            title="Log Out"
+            className="btn btn-ghost btn-circle btn-xs text-error/80 hover:text-error hover:bg-error/10 shrink-0"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            </svg>
+          </button>
         </div>
-        <button
-          onClick={logout}
-          title="Log Out"
-          className="btn btn-ghost btn-circle btn-xs text-error/80 hover:text-error hover:bg-error/10 shrink-0"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-          </svg>
-        </button>
-      </div>
-    </aside>
+      </aside>
+    </div>
   );
 }
