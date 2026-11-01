@@ -182,9 +182,19 @@ export default function ProductTable({
                           {title}
                         </div>
                         <div className="flex flex-wrap items-center gap-2 mt-0.5 text-xs text-base-content/60">
+                          {item.badge && (
+                            <span className="badge badge-xs badge-primary font-bold text-[10px] text-white">
+                              {item.badge}
+                            </span>
+                          )}
                           {item.brand && (
                             <span className="font-medium text-base-content/80">
                               {item.brand}
+                            </span>
+                          )}
+                          {item.rating && (
+                            <span className="text-[11px] text-amber-600 font-semibold">
+                              ★ {item.rating} ({item.reviewsCount || 0})
                             </span>
                           )}
                           {item.model && (
@@ -233,6 +243,11 @@ export default function ProductTable({
                     <div className="font-bold text-base text-base-content font-mono">
                       ₹{item.price !== undefined ? Number(item.price).toLocaleString("en-IN") : "0"}
                     </div>
+                    {item.originalPrice && item.originalPrice > item.price && (
+                      <div className="text-[11px] line-through text-base-content/50 font-mono">
+                        ₹{Number(item.originalPrice).toLocaleString("en-IN")}
+                      </div>
+                    )}
                   </td>
 
                   {/* Stock Level & Status */}

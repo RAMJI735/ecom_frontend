@@ -60,9 +60,14 @@ export default function AddProductModal({
     model: "",
     sku: "",
     price: "",
-    stock: "0",
+    originalPrice: "",
+    stock: "10",
+    badge: "VERIFIED",
+    rating: "4.8",
+    reviewsCount: "48",
     warranty: "1 Year Manufacturer",
     description: "",
+    features: "",
     image: "",
     status: "active",
   };
@@ -101,9 +106,14 @@ export default function AddProductModal({
         model: productToEdit.model || "",
         sku: productToEdit.sku || "",
         price: productToEdit.price !== undefined ? productToEdit.price : "",
-        stock: productToEdit.stock !== undefined ? productToEdit.stock : "0",
+        originalPrice: productToEdit.originalPrice !== undefined ? productToEdit.originalPrice : "",
+        stock: productToEdit.stock !== undefined ? productToEdit.stock : "10",
+        badge: productToEdit.badge || "VERIFIED",
+        rating: productToEdit.rating !== undefined ? productToEdit.rating : "4.8",
+        reviewsCount: productToEdit.reviewsCount !== undefined ? productToEdit.reviewsCount : "48",
         warranty: productToEdit.warranty || "1 Year Manufacturer",
         description: productToEdit.description || "",
+        features: Array.isArray(productToEdit.features) ? productToEdit.features.join("\n") : (productToEdit.features || ""),
         image: productToEdit.image || "",
         status: productToEdit.status || "active",
       });
@@ -184,13 +194,21 @@ export default function AddProductModal({
       name: formData.serviceName.trim(),
       productName: formData.serviceName.trim(),
       category: formData.category,
-      brand: formData.brand.trim(),
+      brand: formData.brand.trim() || "VOLTLINE",
       model: formData.model.trim(),
       sku: formData.sku.trim() || undefined,
       price: Number(formData.price),
+      originalPrice: formData.originalPrice ? Number(formData.originalPrice) : null,
       stock: Number(formData.stock),
+      inStock: Number(formData.stock) > 0,
+      badge: formData.badge ? formData.badge.trim() : "VERIFIED",
+      rating: formData.rating ? Number(formData.rating) : 4.8,
+      reviewsCount: formData.reviewsCount ? Number(formData.reviewsCount) : 48,
       warranty: formData.warranty.trim(),
       description: formData.description.trim(),
+      features: formData.features
+        ? formData.features.split("\n").map((f) => f.trim()).filter(Boolean)
+        : [],
       image: formData.image.trim(),
       status: formData.status,
       type: "product",
@@ -434,6 +452,89 @@ export default function AddProductModal({
                   className="input input-bordered w-full font-mono uppercase text-xs md:text-sm input-sm md:input-md"
                 />
               </div>
+
+              {/* Original Price (MRP) */}
+              <div>
+                <label className="label py-1">
+                  <span className="label-text font-medium text-xs">
+                    Original / MRP Price (₹) (Optional Strikethrough)
+                  </span>
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-base-content/60 font-semibold">
+                    ₹
+                  </span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    name="originalPrice"
+                    value={formData.originalPrice}
+                    onChange={handleChange}
+                    placeholder="e.g. 2350 (Defaults to 1.25x price)"
+                    className="input input-bordered w-full pl-8 input-sm md:input-md"
+                  />
+                </div>
+              </div>
+
+              {/* Badge */}
+              <div>
+                <label className="label py-1">
+                  <span className="label-text font-medium text-xs">
+                    Promotional Tag Badge
+                  </span>
+                </label>
+                <input
+                  type="text"
+                  name="badge"
+                  list="badge-presets"
+                  value={formData.badge}
+                  onChange={handleChange}
+                  placeholder="e.g. BESTSELLER, 25% OFF, POPULAR"
+                  className="input input-bordered w-full input-sm md:input-md"
+                />
+                <datalist id="badge-presets">
+                  <option value="BESTSELLER" />
+                  <option value="POPULAR" />
+                  <option value="HIGH DEMAND" />
+                  <option value="30% OFF" />
+                  <option value="ISI CERTIFIED" />
+                  <option value="PRO TOOL" />
+                  <option value="HEAVY DUTY" />
+                  <option value="GRADE A" />
+                </datalist>
+              </div>
+
+              {/* Rating & Reviews */}
+              <div>
+                <label className="label py-1">
+                  <span className="label-text font-medium text-xs">
+                    Rating (1-5) & Reviews Count
+                  </span>
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="1"
+                    max="5"
+                    name="rating"
+                    value={formData.rating}
+                    onChange={handleChange}
+                    placeholder="4.8"
+                    className="input input-bordered w-full input-sm md:input-md"
+                  />
+                  <input
+                    type="number"
+                    min="0"
+                    name="reviewsCount"
+                    value={formData.reviewsCount}
+                    onChange={handleChange}
+                    placeholder="48"
+                    className="input input-bordered w-full input-sm md:input-md"
+                  />
+                </div>
+              </div>
             </div>
           </div>
 
@@ -493,6 +594,23 @@ export default function AddProductModal({
                   onChange={handleChange}
                   placeholder="Key features, current rating, voltage, certifications (ISI, CE, RoHS)..."
                   className="textarea textarea-bordered w-full text-sm leading-relaxed"
+                />
+              </div>
+
+              {/* Key Features / Bullet Points */}
+              <div className="md:col-span-2">
+                <label className="label py-1">
+                  <span className="label-text font-medium text-xs">
+                    Key Features / What's Included (One per line)
+                  </span>
+                </label>
+                <textarea
+                  name="features"
+                  rows="3"
+                  value={formData.features}
+                  onChange={handleChange}
+                  placeholder="e.g.&#10;100% Pure Electrolytic Copper&#10;Flame Retardant Low Smoke (FR-LSH)&#10;ISI Certified IS:694"
+                  className="textarea textarea-bordered w-full text-xs leading-relaxed"
                 />
               </div>
             </div>

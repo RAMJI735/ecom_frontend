@@ -22,6 +22,11 @@ export default function AddServiceModal({
     model: "",
     description: "",
     price: "",
+    originalPrice: "",
+    badge: "SERVICE",
+    rating: "4.8",
+    reviewsCount: "48",
+    features: "",
     estimated_time: "1-2 Hours",
     warranty: "90 Days",
     image: "",
@@ -58,6 +63,11 @@ export default function AddServiceModal({
         model: serviceToEdit.model || "",
         description: serviceToEdit.description || "",
         price: serviceToEdit.price !== undefined ? serviceToEdit.price : "",
+        originalPrice: serviceToEdit.originalPrice !== undefined ? serviceToEdit.originalPrice : "",
+        badge: serviceToEdit.badge || "SERVICE",
+        rating: serviceToEdit.rating !== undefined ? serviceToEdit.rating : "4.8",
+        reviewsCount: serviceToEdit.reviewsCount !== undefined ? serviceToEdit.reviewsCount : "48",
+        features: Array.isArray(serviceToEdit.features) ? serviceToEdit.features.join("\n") : (serviceToEdit.features || ""),
         estimated_time:
           serviceToEdit.estimated_time || serviceToEdit.estimatedTime || "1-2 Hours",
         warranty: serviceToEdit.warranty || "90 Days",
@@ -123,15 +133,24 @@ export default function AddServiceModal({
 
     const payload = {
       serviceName: formData.serviceName.trim(),
+      name: formData.serviceName.trim(),
       category: formData.category,
-      brand: formData.brand.trim(),
+      brand: formData.brand.trim() || "VOLTLINE SERVICE",
       model: formData.model.trim(),
       description: formData.description.trim(),
       price: Number(formData.price),
+      originalPrice: formData.originalPrice ? Number(formData.originalPrice) : null,
+      badge: formData.badge ? formData.badge.trim() : "SERVICE",
+      rating: formData.rating ? Number(formData.rating) : 4.8,
+      reviewsCount: formData.reviewsCount ? Number(formData.reviewsCount) : 48,
+      features: formData.features
+        ? formData.features.split("\n").map((f) => f.trim()).filter(Boolean)
+        : [],
       estimated_time: formData.estimated_time.trim(),
       warranty: formData.warranty.trim(),
       image: formData.image.trim(),
       status: formData.status,
+      type: "service",
     };
 
     try {

@@ -169,6 +169,11 @@ export default function ServiceTable({
                           {title}
                         </div>
                         <div className="flex items-center gap-2 mt-0.5 text-xs text-base-content/60">
+                          {item.badge && (
+                            <span className="badge badge-xs badge-info font-bold text-[10px] text-white">
+                              {item.badge}
+                            </span>
+                          )}
                           {item.brand && (
                             <span className="font-medium text-base-content/80">
                               {item.brand}
@@ -195,8 +200,13 @@ export default function ServiceTable({
                   {/* Price */}
                   <td>
                     <div className="font-bold text-base text-base-content font-mono">
-                      ₹{item.price !== undefined ? item.price : 0}
+                      ₹{item.price !== undefined ? Number(item.price).toLocaleString("en-IN") : 0}
                     </div>
+                    {item.originalPrice && item.originalPrice > item.price && (
+                      <div className="text-[11px] line-through text-base-content/50 font-mono">
+                        ₹{Number(item.originalPrice).toLocaleString("en-IN")}
+                      </div>
+                    )}
                   </td>
 
                   {/* Duration & Warranty */}

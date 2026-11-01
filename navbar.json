@@ -126,6 +126,11 @@
         "id": "store-profile",
         "title": "Store Profile",
         "path": "/settings/store"
+      },
+      {
+        "id": "banners-offers",
+        "title": "Banners & Offers",
+        "path": "/settings/banners"
       }
     ]
   }
