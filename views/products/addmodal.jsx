@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react";
 import toast from "react-hot-toast";
 import { categoryService } from "../../service/category/categoryService";
+import { uploadService } from "../../service/uploadService";
+import ImageUpload from "@/components/ImageUpload";
 
 const BRAND_SUGGESTIONS = [
   "Havells",
@@ -73,6 +75,8 @@ export default function AddProductModal({
   };
 
   const [formData, setFormData] = useState(initialFormState);
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
   const [errors, setErrors] = useState({});
   const [categoryList, setCategoryList] = useState(categories);
 
@@ -124,6 +128,7 @@ export default function AddProductModal({
         category: defaultCat ? defaultCat._id || defaultCat.id : "",
       });
     }
+    setSelectedFile(null);
     setErrors({});
   }, [productToEdit, isOpen, categoryList, categories]);
 
@@ -189,6 +194,30 @@ export default function AddProductModal({
       return;
     }
 
+    let finalImageUrl = formData.image.trim();
+
+    // Upload selected file to Cloudinary ONLY when submitting the form
+    if (selectedFile) {
+      setUploadingImage(true);
+      try {
+        toast.loading("Uploading product image via FormData...", { id: "product-upload" });
+        const uploadRes = await uploadService.uploadImage(selectedFile);
+        finalImageUrl = uploadRes.url;
+        toast.success("Image uploaded successfully!", { id: "product-upload" });
+
+        // Clean up previous Cloudinary image if replacing an existing one
+        if (productToEdit?.image && productToEdit.image !== finalImageUrl) {
+          uploadService.deleteImage(productToEdit.image).catch(() => {});
+        }
+      } catch (uploadErr) {
+        toast.error(uploadErr.message || "Failed to upload product image", { id: "product-upload" });
+        setUploadingImage(false);
+        return;
+      } finally {
+        setUploadingImage(false);
+      }
+    }
+
     const payload = {
       serviceName: formData.serviceName.trim(),
       name: formData.serviceName.trim(),
@@ -209,13 +238,14 @@ export default function AddProductModal({
       features: formData.features
         ? formData.features.split("\n").map((f) => f.trim()).filter(Boolean)
         : [],
-      image: formData.image.trim(),
+      image: finalImageUrl,
       status: formData.status,
       type: "product",
     };
 
     const id = productToEdit?._id || productToEdit?.id;
     await onSave(payload, id);
+    setSelectedFile(null);
   };
 
   const isEditing = Boolean(productToEdit);
@@ -625,20 +655,21 @@ export default function AddProductModal({
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
-              {/* Image URL & Presets */}
-              <div className="md:col-span-2 space-y-2">
-                <label className="label py-1">
-                  <span className="label-text font-medium text-xs">
-                    Product Image URL
-                  </span>
-                </label>
-                <input
-                  type="url"
-                  name="image"
+              {/* Image Upload Component (FormData) */}
+              <div className="md:col-span-2 space-y-3">
+                <ImageUpload
+                  label="Product Photo"
+                  aspectRatio="wide"
                   value={formData.image}
-                  onChange={handleChange}
-                  placeholder="https://example.com/product-image.jpg"
-                  className="input input-bordered w-full input-sm md:input-md text-xs"
+                  file={selectedFile}
+                  onFileSelect={setSelectedFile}
+                  onChange={(url, file) => {
+                    setFormData((prev) => ({ ...prev, image: url }));
+                    setSelectedFile(file || null);
+                  }}
+                  isUploading={uploadingImage}
+                  placeholder="Choose product photo (Uploads on Save)"
+                  disabled={loading || uploadingImage}
                 />
 
                 <div className="flex items-center gap-1.5 flex-wrap pt-1">
@@ -667,31 +698,8 @@ export default function AddProductModal({
                 </div>
               </div>
 
-              {/* Image Preview & Status */}
+              {/* Status */}
               <div className="flex flex-col gap-3">
-                <div>
-                  <label className="label py-1">
-                    <span className="label-text font-medium text-xs">Preview</span>
-                  </label>
-                  <div className="w-full h-24 rounded-xl border border-base-300 bg-base-200/50 flex items-center justify-center overflow-hidden">
-                    {formData.image ? (
-                      <img
-                        src={formData.image}
-                        alt="Product preview"
-                        className="w-full h-full object-cover"
-                        onError={(e) => {
-                          e.currentTarget.style.display = "none";
-                        }}
-                      />
-                    ) : (
-                      <div className="flex flex-col items-center text-base-content/40 text-xs">
-                        <span className="text-xl">🔌</span>
-                        <span>No image</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
                 <div>
                   <label className="label py-1">
                     <span className="label-text font-medium text-xs">Catalog Status</span>

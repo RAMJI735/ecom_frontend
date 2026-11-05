@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react";
 import toast from "react-hot-toast";
 import { categoryService } from "../../service/category/categoryService";
+import { uploadService } from "../../service/uploadService";
+import ImageUpload from "@/components/ImageUpload";
 
 const DURATION_PRESETS = ["30 Mins", "1 Hour", "1-2 Hours", "2-3 Hours", "3-5 Hours", "Same Day"];
 const WARRANTY_PRESETS = ["No Warranty", "30 Days", "90 Days", "6 Months", "1 Year"];
@@ -34,6 +36,8 @@ export default function AddServiceModal({
   };
 
   const [formData, setFormData] = useState(initialFormState);
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
   const [errors, setErrors] = useState({});
   const [categoryList, setCategoryList] = useState(categories);
 
@@ -81,6 +85,7 @@ export default function AddServiceModal({
         category: firstCat ? (firstCat._id || firstCat.id) : "",
       });
     }
+    setSelectedFile(null);
     setErrors({});
   }, [serviceToEdit, isOpen, categoryList, categories]);
 
@@ -131,6 +136,30 @@ export default function AddServiceModal({
       return;
     }
 
+    let finalImageUrl = formData.image.trim();
+
+    // Upload selected file to Cloudinary ONLY when submitting the form
+    if (selectedFile) {
+      setUploadingImage(true);
+      try {
+        toast.loading("Uploading service image via FormData...", { id: "service-upload" });
+        const uploadRes = await uploadService.uploadImage(selectedFile);
+        finalImageUrl = uploadRes.url;
+        toast.success("Image uploaded successfully!", { id: "service-upload" });
+
+        // Clean up previous Cloudinary image if replacing an existing one
+        if (serviceToEdit?.image && serviceToEdit.image !== finalImageUrl) {
+          uploadService.deleteImage(serviceToEdit.image).catch(() => {});
+        }
+      } catch (uploadErr) {
+        toast.error(uploadErr.message || "Failed to upload service image", { id: "service-upload" });
+        setUploadingImage(false);
+        return;
+      } finally {
+        setUploadingImage(false);
+      }
+    }
+
     const payload = {
       serviceName: formData.serviceName.trim(),
       name: formData.serviceName.trim(),
@@ -148,13 +177,14 @@ export default function AddServiceModal({
         : [],
       estimated_time: formData.estimated_time.trim(),
       warranty: formData.warranty.trim(),
-      image: formData.image.trim(),
+      image: finalImageUrl,
       status: formData.status,
       type: "service",
     };
 
     try {
       await onSave(payload, serviceToEdit?._id || serviceToEdit?.id);
+      setSelectedFile(null);
     } catch (err) {
       // error handling is in onSave
     }
@@ -395,36 +425,22 @@ export default function AddServiceModal({
             ></textarea>
           </div>
 
-          {/* Image URL & Preview */}
-          <div className="form-control">
-            <label className="label py-1">
-              <span className="label-text font-semibold text-base-content">Service Image URL</span>
-              <span className="label-text-alt text-base-content/50">Optional image link</span>
-            </label>
-            <div className="flex gap-3 items-center">
-              <input
-                type="url"
-                name="image"
-                value={formData.image}
-                onChange={handleChange}
-                placeholder="https://images.unsplash.com/..."
-                className="input input-bordered flex-1 focus:input-primary"
-                disabled={loading}
-              />
-              {formData.image && (
-                <div className="avatar">
-                  <div className="w-12 h-12 rounded-lg ring ring-primary ring-offset-base-100 ring-offset-1">
-                    <img
-                      src={formData.image}
-                      alt="Preview"
-                      onError={(e) => {
-                        e.target.style.display = "none";
-                      }}
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
+          {/* Image Upload Component (FormData) */}
+          <div className="pt-1">
+            <ImageUpload
+              label="Service Package Cover Image"
+              aspectRatio="wide"
+              value={formData.image}
+              file={selectedFile}
+              onFileSelect={setSelectedFile}
+              onChange={(url, file) => {
+                setFormData((prev) => ({ ...prev, image: url }));
+                setSelectedFile(file || null);
+              }}
+              isUploading={uploadingImage}
+              placeholder="Choose service package image (Uploads on Save)"
+              disabled={loading || uploadingImage}
+            />
           </div>
 
           {/* Status Selection */}

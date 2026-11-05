@@ -4,6 +4,8 @@ import { useState, useEffect } from "react";
 import toast from "react-hot-toast";
 import { settingsService } from "../../../../../service/settings/settingsService";
 import { couponService } from "../../../../../service/coupon/couponService";
+import { uploadService } from "../../../../../service/uploadService";
+import ImageUpload from "@/components/ImageUpload";
 
 export default function BannersAndOffersPage() {
   const [loading, setLoading] = useState(true);
@@ -13,6 +15,8 @@ export default function BannersAndOffersPage() {
   // Banner Modal
   const [bannerModalOpen, setBannerModalOpen] = useState(false);
   const [editingBannerId, setEditingBannerId] = useState(null);
+  const [bannerFile, setBannerFile] = useState(null);
+  const [bannerUploading, setBannerUploading] = useState(false);
   const [bannerForm, setBannerForm] = useState({
     title: "",
     subtitle: "",
@@ -39,16 +43,32 @@ export default function BannersAndOffersPage() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [settingsData, couponsData] = await Promise.all([
+      const [settingsResult, couponsResult] = await Promise.allSettled([
         settingsService.get(),
         couponService.get(),
       ]);
 
-      if (settingsData?.heroBanners) {
-        setBanners(settingsData.heroBanners);
+      if (settingsResult.status === "fulfilled" && settingsResult.value?.heroBanners) {
+        setBanners(settingsResult.value.heroBanners);
+      } else if (settingsResult.status === "rejected") {
+        console.warn("Failed to load banners:", settingsResult.reason?.message);
       }
-      if (Array.isArray(couponsData)) {
-        setCoupons(couponsData);
+
+      if (couponsResult.status === "fulfilled" && Array.isArray(couponsResult.value)) {
+        setCoupons(couponsResult.value);
+      } else if (couponsResult.status === "rejected") {
+        console.warn("Failed to load coupons:", couponsResult.reason?.message);
+      }
+
+      if (settingsResult.status === "rejected" && couponsResult.status === "rejected") {
+        const isNetworkErr =
+          settingsResult.reason?.message === "Network Error" ||
+          couponsResult.reason?.message === "Network Error";
+        toast.error(
+          isNetworkErr
+            ? "Cannot connect to backend server. Check NEXT_PUBLIC_BACKEND_URL or start local server."
+            : "Failed to load banners or coupons"
+        );
       }
     } catch (err) {
       console.error("Failed to load banners and offers:", err);
@@ -71,18 +91,43 @@ export default function BannersAndOffersPage() {
     }
 
     try {
+      setBannerUploading(true);
+      let finalImageUrl = bannerForm.image;
+
+      // Only upload to Cloudinary on final submit if a file was selected!
+      if (bannerFile) {
+        toast.loading("Uploading banner image via FormData...", { id: "banner-upload" });
+        const uploadRes = await uploadService.uploadImage(bannerFile);
+        finalImageUrl = uploadRes.url;
+        toast.success("Image uploaded successfully!", { id: "banner-upload" });
+
+        // If editing and had a previous Cloudinary image, clean up old asset
+        const prevBanner = banners.find((b) => b._id === editingBannerId);
+        if (prevBanner?.image && prevBanner.image !== finalImageUrl) {
+          uploadService.deleteImage(prevBanner.image).catch(() => {});
+        }
+      }
+
+      const payload = {
+        ...bannerForm,
+        image: finalImageUrl,
+      };
+
       if (editingBannerId) {
-        await settingsService.updateBanner(editingBannerId, bannerForm);
+        await settingsService.updateBanner(editingBannerId, payload);
         toast.success("Banner updated successfully!");
       } else {
-        await settingsService.addBanner(bannerForm);
+        await settingsService.addBanner(payload);
         toast.success("Banner added successfully!");
       }
       setBannerModalOpen(false);
       setEditingBannerId(null);
+      setBannerFile(null);
       fetchData();
     } catch (err) {
-      toast.error(err.response?.data?.message || "Failed to save banner");
+      toast.error(err.response?.data?.message || err.message || "Failed to save banner", { id: "banner-upload" });
+    } finally {
+      setBannerUploading(false);
     }
   };
 
@@ -90,7 +135,11 @@ export default function BannersAndOffersPage() {
   const handleDeleteBanner = async (id) => {
     if (!confirm("Are you sure you want to delete this promotional banner?")) return;
     try {
+      const bannerToDelete = banners.find((b) => b._id === id);
       await settingsService.deleteBanner(id);
+      if (bannerToDelete?.image) {
+        uploadService.deleteImage(bannerToDelete.image).catch(() => {});
+      }
       toast.success("Banner deleted");
       fetchData();
     } catch (err) {
@@ -190,6 +239,7 @@ export default function BannersAndOffersPage() {
             <button
               onClick={() => {
                 setEditingBannerId(null);
+                setBannerFile(null);
                 setBannerForm({
                   title: "",
                   subtitle: "",
@@ -224,6 +274,18 @@ export default function BannersAndOffersPage() {
                   }`}
                 >
                   <div className="space-y-2">
+                    {b.image && (
+                      <div className="w-full h-28 rounded-lg overflow-hidden bg-base-200 border border-base-300 mb-2 relative">
+                        <img
+                          src={b.image}
+                          alt={b.title}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            e.currentTarget.style.display = "none";
+                          }}
+                        />
+                      </div>
+                    )}
                     <div className="flex items-center justify-between">
                       <span className="badge badge-warning badge-sm font-semibold tracking-wider">
                         {b.tag || "PROMO"}
@@ -266,6 +328,7 @@ export default function BannersAndOffersPage() {
                       <button
                         onClick={() => {
                           setEditingBannerId(b._id);
+                          setBannerFile(null);
                           setBannerForm({
                             title: b.title || "",
                             subtitle: b.subtitle || "",
@@ -465,16 +528,19 @@ export default function BannersAndOffersPage() {
                 </div>
               </div>
 
-              <div className="form-control">
-                <label className="label">
-                  <span className="label-text font-semibold">Banner Image URL (Optional)</span>
-                </label>
-                <input
-                  type="url"
-                  placeholder="https://images.unsplash.com/..."
-                  className="input input-bordered w-full"
+              <div className="pt-1">
+                <ImageUpload
+                  label="Banner Promotional Image"
+                  aspectRatio="banner"
                   value={bannerForm.image}
-                  onChange={(e) => setBannerForm({ ...bannerForm, image: e.target.value })}
+                  file={bannerFile}
+                  onFileSelect={setBannerFile}
+                  onChange={(url, file) => {
+                    setBannerForm({ ...bannerForm, image: url });
+                    setBannerFile(file || null);
+                  }}
+                  isUploading={bannerUploading}
+                  placeholder="Choose hero banner image (Uploads on Save)"
                 />
               </div>
 

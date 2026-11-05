@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from "react";
 import toast from "react-hot-toast";
+import { uploadService } from "../../service/uploadService";
+import ImageUpload from "@/components/ImageUpload";
 
 // Popular icons/emojis for electrical & appliance services
 const POPULAR_ICONS = ["⚡", "❄️", "🔧", "🧺", "🍳", "📺", "💡", "🔌", "🛠️", "🌪️", "🎛️", "🚿"];
@@ -16,6 +18,8 @@ export default function AddModal({ isOpen, onClose, onSave, categoryToEdit = nul
   };
 
   const [formData, setFormData] = useState(initialFormState);
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
   const [errors, setErrors] = useState({});
 
   useEffect(() => {
@@ -30,6 +34,7 @@ export default function AddModal({ isOpen, onClose, onSave, categoryToEdit = nul
     } else {
       setFormData(initialFormState);
     }
+    setSelectedFile(null);
     setErrors({});
   }, [categoryToEdit, isOpen]);
 
@@ -74,16 +79,41 @@ export default function AddModal({ isOpen, onClose, onSave, categoryToEdit = nul
       return;
     }
 
+    let finalImageUrl = formData.image.trim();
+
+    // Upload selected file to Cloudinary ONLY when submitting the form
+    if (selectedFile) {
+      setUploadingImage(true);
+      try {
+        toast.loading("Uploading category image via FormData...", { id: "cat-upload" });
+        const uploadRes = await uploadService.uploadImage(selectedFile);
+        finalImageUrl = uploadRes.url;
+        toast.success("Image uploaded successfully!", { id: "cat-upload" });
+
+        // Clean up previous Cloudinary image if replacing an existing one
+        if (categoryToEdit?.image && categoryToEdit.image !== finalImageUrl) {
+          uploadService.deleteImage(categoryToEdit.image).catch(() => {});
+        }
+      } catch (uploadErr) {
+        toast.error(uploadErr.message || "Failed to upload image", { id: "cat-upload" });
+        setUploadingImage(false);
+        return;
+      } finally {
+        setUploadingImage(false);
+      }
+    }
+
     const payload = {
       categoryName: formData.categoryName.trim(),
       description: formData.description.trim(),
       icon: formData.icon.trim(),
-      image: formData.image.trim(),
+      image: finalImageUrl,
       status: formData.status,
     };
 
     try {
       await onSave(payload, categoryToEdit?._id || categoryToEdit?.id);
+      setSelectedFile(null);
     } catch (err) {
       // error handling is managed in onSave callback
     }
@@ -194,36 +224,22 @@ export default function AddModal({ isOpen, onClose, onSave, categoryToEdit = nul
             ></textarea>
           </div>
 
-          {/* Image URL & Preview */}
-          <div className="form-control">
-            <label className="label py-1">
-              <span className="label-text font-semibold text-base-content">Cover Image URL</span>
-              <span className="label-text-alt text-base-content/50">Optional URL</span>
-            </label>
-            <div className="flex gap-3 items-center">
-              <input
-                type="url"
-                name="image"
-                value={formData.image}
-                onChange={handleChange}
-                placeholder="https://images.unsplash.com/photo-..."
-                className="input input-bordered flex-1 focus:input-primary"
-                disabled={loading}
-              />
-              {formData.image && (
-                <div className="avatar">
-                  <div className="w-12 h-12 rounded-lg ring ring-primary ring-offset-base-100 ring-offset-1">
-                    <img
-                      src={formData.image}
-                      alt="Category Preview"
-                      onError={(e) => {
-                        e.target.style.display = "none";
-                      }}
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
+          {/* Image Upload Component (FormData) */}
+          <div className="pt-1">
+            <ImageUpload
+              label="Cover Image"
+              aspectRatio="wide"
+              value={formData.image}
+              file={selectedFile}
+              onFileSelect={setSelectedFile}
+              onChange={(url, file) => {
+                setFormData((prev) => ({ ...prev, image: url }));
+                setSelectedFile(file || null);
+              }}
+              isUploading={uploadingImage}
+              placeholder="Choose category cover image (Uploads on Save)"
+              disabled={loading || uploadingImage}
+            />
           </div>
 
           {/* Status Selection */}

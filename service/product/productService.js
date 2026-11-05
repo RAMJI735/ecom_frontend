@@ -3,10 +3,17 @@ import api from "../api";
 export const productService = {
   // Create new product
   create: async (productData) => {
-    const payload = {
-      ...productData,
-      type: "product",
-    };
+    let payload = productData;
+    if (typeof FormData !== "undefined" && productData instanceof FormData) {
+      if (!productData.has("type")) {
+        productData.append("type", "product");
+      }
+    } else {
+      payload = {
+        ...productData,
+        type: "product",
+      };
+    }
     try {
       const response = await api.post("/api/products", payload);
       return response.data;
@@ -52,10 +59,17 @@ export const productService = {
 
   // Update product by ID
   update: async (id, productData) => {
-    const payload = {
-      ...productData,
-      type: "product",
-    };
+    let payload = productData;
+    if (typeof FormData !== "undefined" && productData instanceof FormData) {
+      if (!productData.has("type")) {
+        productData.append("type", "product");
+      }
+    } else {
+      payload = {
+        ...productData,
+        type: "product",
+      };
+    }
     try {
       const response = await api.put(`/api/products/${id}`, payload);
       return response.data;
