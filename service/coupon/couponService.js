@@ -20,6 +20,11 @@ export const couponService = {
     const res = await api.delete(`/api/coupons/${id}`);
     return res.data?.data || res.data;
   },
+
+  async validate(code, subtotal) {
+    const res = await api.post("/api/coupons/validate", { code, subtotal });
+    return res.data;
+  },
 };
 
 export default couponService;

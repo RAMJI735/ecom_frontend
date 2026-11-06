@@ -4,6 +4,9 @@ import { useState, useEffect, useMemo, useTransition } from "react";
 import Link from "next/link";
 import toast from "react-hot-toast";
 import { orderService } from "@service/order/orderService";
+import { serviceApi } from "@service/serviceApi/serviceApi";
+import { settingsService } from "@service/settings/settingsService";
+import { couponService } from "@service/coupon/couponService";
 import Pagination from "@/components/Pagination";
 
 export default function OrdersView({
@@ -38,6 +41,231 @@ export default function OrdersView({
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
   const [copiedId, setCopiedId] = useState(null);
+
+  // Book Order Modal State
+  const [bookModalOpen, setBookModalOpen] = useState(false);
+  const [catalogItems, setCatalogItems] = useState([]);
+  const [storeSettings, setStoreSettings] = useState(null);
+  const [selectedCatalogItemId, setSelectedCatalogItemId] = useState("");
+  const [selectedItemQty, setSelectedItemQty] = useState(1);
+  const [orderCartItems, setOrderCartItems] = useState([]);
+  const [shippingForm, setShippingForm] = useState({
+    fullName: "",
+    phone: "",
+    email: "",
+    street: "",
+    city: "Kolkata",
+    state: "West Bengal",
+    postalCode: "700091",
+  });
+  const [couponInput, setCouponInput] = useState("");
+  const [appliedCoupon, setAppliedCoupon] = useState(null);
+  const [validatingCoupon, setValidatingCoupon] = useState(false);
+  const [bookingSubmitting, setBookingSubmitting] = useState(false);
+
+  // Open booking modal & fetch live catalog items and store delivery settings
+  const handleOpenBookModal = async () => {
+    setBookModalOpen(true);
+    try {
+      const [itemsRes, settingsRes] = await Promise.allSettled([
+        serviceApi.read({ all: true }),
+        settingsService.get(),
+      ]);
+
+      if (itemsRes.status === "fulfilled") {
+        const list = Array.isArray(itemsRes.value?.data)
+          ? itemsRes.value.data
+          : Array.isArray(itemsRes.value)
+          ? itemsRes.value
+          : [];
+        setCatalogItems(list.filter((i) => i.status !== "inactive"));
+        if (list.length > 0 && !selectedCatalogItemId) {
+          setSelectedCatalogItemId(list[0]._id || list[0].id);
+        }
+      }
+
+      if (settingsRes.status === "fulfilled" && settingsRes.value) {
+        setStoreSettings(settingsRes.value);
+      }
+    } catch (err) {
+      console.error("Failed to load catalog or settings for booking:", err);
+    }
+  };
+
+  // Add item to booking cart
+  const handleAddItemToBookingCart = () => {
+    if (!selectedCatalogItemId) return;
+    const found = catalogItems.find((i) => (i._id || i.id) === selectedCatalogItemId);
+    if (!found) return;
+
+    const existingIndex = orderCartItems.findIndex(
+      (ci) => ci.itemId === (found._id || found.id)
+    );
+
+    const qty = Math.max(1, parseInt(selectedItemQty, 10) || 1);
+
+    if (existingIndex >= 0) {
+      const updated = [...orderCartItems];
+      updated[existingIndex].quantity += qty;
+      updated[existingIndex].itemTotal = updated[existingIndex].quantity * found.price;
+      setOrderCartItems(updated);
+    } else {
+      setOrderCartItems([
+        ...orderCartItems,
+        {
+          itemId: found._id || found.id,
+          name: found.serviceName || found.name || "Product / Service",
+          type: found.type || "service",
+          price: Number(found.price) || 0,
+          quantity: qty,
+          image: found.image || "",
+          category: found.category || "",
+          itemTotal: (Number(found.price) || 0) * qty,
+        },
+      ]);
+    }
+    setSelectedItemQty(1);
+    toast.success(`Added ${found.serviceName || found.name}`);
+  };
+
+  const handleRemoveBookingItem = (index) => {
+    setOrderCartItems((prev) => prev.filter((_, idx) => idx !== index));
+  };
+
+  // Estimated Calculations for preview
+  const bookingSubtotal = useMemo(() => {
+    return orderCartItems.reduce((acc, curr) => acc + curr.itemTotal, 0);
+  }, [orderCartItems]);
+
+  // Delivery Cost calculation
+  const deliveryRules = useMemo(() => {
+    const dcEnabled = storeSettings?.deliveryCharges !== undefined
+      ? Boolean(storeSettings.deliveryCharges)
+      : Boolean(storeSettings?.commerce?.deliveryCharges);
+
+    const minPrice = storeSettings?.minPrice !== undefined
+      ? Number(storeSettings.minPrice)
+      : (storeSettings?.commerce?.minPrice !== undefined
+          ? Number(storeSettings.commerce.minPrice)
+          : Number(storeSettings?.commerce?.freeDeliveryThreshold ?? 100));
+
+    const deliveryCost = storeSettings?.delivery_cost !== undefined
+      ? Number(storeSettings.delivery_cost)
+      : (storeSettings?.commerce?.delivery_cost !== undefined
+          ? Number(storeSettings.commerce.delivery_cost)
+          : Number(storeSettings?.commerce?.standardDeliveryFee ?? 50));
+
+    let fee = 0;
+    if (dcEnabled) {
+      if (bookingSubtotal < minPrice) {
+        fee = deliveryCost;
+      } else {
+        fee = 0;
+      }
+    } else {
+      fee = 0;
+    }
+
+    return {
+      enabled: dcEnabled,
+      minPrice,
+      deliveryCost,
+      fee,
+      isFreeUnlocked: dcEnabled && bookingSubtotal >= minPrice,
+    };
+  }, [storeSettings, bookingSubtotal]);
+
+  // Apply Coupon in booking modal
+  const handleApplyCoupon = async () => {
+    if (!couponInput.trim()) {
+      toast.error("Please enter a coupon code");
+      return;
+    }
+    if (bookingSubtotal <= 0) {
+      toast.error("Please add at least one item to calculate coupon discount");
+      return;
+    }
+
+    try {
+      setValidatingCoupon(true);
+      const res = await couponService.validate(couponInput.trim().toUpperCase(), bookingSubtotal);
+      if (res?.success) {
+        setAppliedCoupon(res.data);
+        toast.success(res.message || `Coupon '${couponInput.toUpperCase()}' applied!`);
+      } else {
+        toast.error(res?.message || "Invalid coupon");
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Failed to validate coupon");
+      setAppliedCoupon(null);
+    } finally {
+      setValidatingCoupon(false);
+    }
+  };
+
+  // Submit Booking Order (Backend calculates and verifies all fees!)
+  const handleBookOrderSubmit = async (e) => {
+    e.preventDefault();
+    if (orderCartItems.length === 0) {
+      toast.error("Please add at least one item to the order");
+      return;
+    }
+    if (!shippingForm.fullName.trim() || !shippingForm.phone.trim() || !shippingForm.street.trim() || !shippingForm.city.trim()) {
+      toast.error("Please fill in customer name, phone, street, and city");
+      return;
+    }
+
+    try {
+      setBookingSubmitting(true);
+      const payload = {
+        items: orderCartItems.map((i) => ({
+          item: i.itemId,
+          name: i.name,
+          type: i.type,
+          price: i.price,
+          quantity: i.quantity,
+          image: i.image,
+          category: i.category,
+        })),
+        shippingAddress: {
+          fullName: shippingForm.fullName.trim(),
+          phone: shippingForm.phone.trim(),
+          email: shippingForm.email ? shippingForm.email.trim() : "",
+          street: shippingForm.street.trim(),
+          city: shippingForm.city.trim(),
+          state: shippingForm.state.trim() || "West Bengal",
+          postalCode: shippingForm.postalCode.trim() || "700091",
+          country: "India",
+        },
+        paymentMethod: "COD",
+        couponCode: appliedCoupon ? appliedCoupon.code : (couponInput.trim().toUpperCase() || undefined),
+      };
+
+      const res = await orderService.create(payload);
+      const orderNum = res.data?.orderNumber || "New Order";
+      toast.success(`Order ${orderNum} booked successfully! Backend verified all fees.`);
+
+      setBookModalOpen(false);
+      setOrderCartItems([]);
+      setAppliedCoupon(null);
+      setCouponInput("");
+      setShippingForm({
+        fullName: "",
+        phone: "",
+        email: "",
+        street: "",
+        city: "Kolkata",
+        state: "West Bengal",
+        postalCode: "700091",
+      });
+      fetchOrders(true);
+    } catch (err) {
+      console.error("Booking error:", err);
+      toast.error(err.response?.data?.message || err.message || "Failed to book order");
+    } finally {
+      setBookingSubmitting(false);
+    }
+  };
 
   // Fetch all orders from backend
   const fetchOrders = async (silent = false) => {
@@ -265,6 +493,14 @@ export default function OrdersView({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={handleOpenBookModal}
+            className="btn btn-primary btn-sm gap-1.5 shadow-sm"
+          >
+            <span>📦</span>
+            <span>Book Order</span>
+          </button>
+
           <button
             onClick={() => fetchOrders(true)}
             disabled={refreshing || loading}
@@ -877,6 +1113,322 @@ export default function OrdersView({
           </div>
           <form method="dialog" className="modal-backdrop">
             <button onClick={() => setCancelModalOpen(false)}>close</button>
+          </form>
+        </dialog>
+      )}
+
+      {/* Book New Order Modal */}
+      {bookModalOpen && (
+        <dialog className="modal modal-open z-50">
+          <div className="modal-box max-w-3xl p-6 border border-base-300 bg-base-100 shadow-2xl max-h-[92vh] flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between pb-3 border-b border-base-200 shrink-0">
+              <div>
+                <h3 className="font-bold text-lg text-base-content flex items-center gap-2">
+                  <span>📦 Book New Order</span>
+                </h3>
+                <p className="text-xs text-base-content/60">
+                  Select products or services. Backend automatically calculates subtotal, delivery charges, and validates coupon limits.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setBookModalOpen(false)}
+                className="btn btn-sm btn-circle btn-ghost"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleBookOrderSubmit} className="flex-1 overflow-y-auto space-y-5 py-4 pr-1">
+              {/* Section 1: Item Selection */}
+              <div className="space-y-3">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-primary">
+                  1. Add Catalog Items
+                </h4>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <select
+                    className="select select-bordered select-sm flex-1"
+                    value={selectedCatalogItemId}
+                    onChange={(e) => setSelectedCatalogItemId(e.target.value)}
+                  >
+                    <option value="" disabled>-- Select Electrical Product / Service --</option>
+                    {catalogItems.map((item) => (
+                      <option key={item._id || item.id} value={item._id || item.id}>
+                        {item.serviceName || item.name} • ₹{item.price} ({item.type || "product"})
+                      </option>
+                    ))}
+                  </select>
+
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min="1"
+                      className="input input-bordered input-sm w-20 font-mono"
+                      value={selectedItemQty}
+                      onChange={(e) => setSelectedItemQty(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                      placeholder="Qty"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddItemToBookingCart}
+                      className="btn btn-sm btn-primary shrink-0"
+                    >
+                      + Add Item
+                    </button>
+                  </div>
+                </div>
+
+                {/* Items Added Table */}
+                {orderCartItems.length > 0 ? (
+                  <div className="border border-base-200 rounded-xl overflow-hidden bg-base-200/20">
+                    <table className="table table-xs w-full">
+                      <thead className="bg-base-200/50">
+                        <tr>
+                          <th>Item</th>
+                          <th>Price</th>
+                          <th>Qty</th>
+                          <th>Total</th>
+                          <th className="text-right">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {orderCartItems.map((it, idx) => (
+                          <tr key={idx}>
+                            <td className="font-medium text-xs">{it.name}</td>
+                            <td className="font-mono">₹{it.price}</td>
+                            <td className="font-mono font-bold">{it.quantity}</td>
+                            <td className="font-mono font-bold text-primary">₹{it.itemTotal}</td>
+                            <td className="text-right">
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveBookingItem(idx)}
+                                className="btn btn-ghost btn-xs text-error"
+                              >
+                                ✕
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="p-4 rounded-xl border border-dashed border-base-300 text-center text-xs text-base-content/60">
+                    No items added yet. Select a product or service above.
+                  </div>
+                )}
+              </div>
+
+              {/* Section 2: Shipping Details */}
+              <div className="space-y-3 border-t border-base-200 pt-3">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-primary">
+                  2. Customer & Delivery Address
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="form-control">
+                    <label className="label py-0.5">
+                      <span className="label-text text-xs font-medium">Customer Full Name *</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Ramesh Sharma"
+                      className="input input-bordered input-sm w-full"
+                      value={shippingForm.fullName}
+                      onChange={(e) => setShippingForm({ ...shippingForm, fullName: e.target.value })}
+                    />
+                  </div>
+
+                  <div className="form-control">
+                    <label className="label py-0.5">
+                      <span className="label-text text-xs font-medium">Phone Number *</span>
+                    </label>
+                    <input
+                      type="tel"
+                      required
+                      placeholder="e.g. 9876543210"
+                      className="input input-bordered input-sm w-full font-mono"
+                      value={shippingForm.phone}
+                      onChange={(e) => setShippingForm({ ...shippingForm, phone: e.target.value })}
+                    />
+                  </div>
+
+                  <div className="form-control sm:col-span-2">
+                    <label className="label py-0.5">
+                      <span className="label-text text-xs font-medium">Street Address / Landmark *</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. 14B Salt Lake Sector 5, Near Tech Park"
+                      className="input input-bordered input-sm w-full"
+                      value={shippingForm.street}
+                      onChange={(e) => setShippingForm({ ...shippingForm, street: e.target.value })}
+                    />
+                  </div>
+
+                  <div className="form-control">
+                    <label className="label py-0.5">
+                      <span className="label-text text-xs font-medium">City *</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="Kolkata"
+                      className="input input-bordered input-sm w-full"
+                      value={shippingForm.city}
+                      onChange={(e) => setShippingForm({ ...shippingForm, city: e.target.value })}
+                    />
+                  </div>
+
+                  <div className="form-control">
+                    <label className="label py-0.5">
+                      <span className="label-text text-xs font-medium">Postal Code / Pincode</span>
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="700091"
+                      className="input input-bordered input-sm w-full font-mono"
+                      value={shippingForm.postalCode}
+                      onChange={(e) => setShippingForm({ ...shippingForm, postalCode: e.target.value })}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Section 3: Coupon Code */}
+              <div className="space-y-2 border-t border-base-200 pt-3">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-primary">
+                  3. Coupon Code & Discounts
+                </h4>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="e.g. VOLT10, SITE500"
+                    className="input input-bordered input-sm font-mono uppercase flex-1"
+                    value={couponInput}
+                    onChange={(e) => {
+                      setCouponInput(e.target.value.toUpperCase());
+                      if (appliedCoupon && appliedCoupon.code !== e.target.value.toUpperCase()) {
+                        setAppliedCoupon(null);
+                      }
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleApplyCoupon}
+                    disabled={validatingCoupon || !couponInput.trim()}
+                    className="btn btn-sm btn-outline btn-secondary"
+                  >
+                    {validatingCoupon ? "Checking..." : "Apply Coupon"}
+                  </button>
+                </div>
+
+                {appliedCoupon && (
+                  <div className="badge badge-success badge-sm gap-1 text-white">
+                    ✓ Coupon {appliedCoupon.code} applied: -₹{appliedCoupon.discount} discount
+                  </div>
+                )}
+              </div>
+
+              {/* Section 4: Live Fee & Delivery Calculation Preview */}
+              <div className="card bg-base-200/50 border border-base-300 p-4 rounded-xl space-y-2 text-xs">
+                <div className="font-bold text-xs uppercase tracking-wider text-base-content/70 pb-1 border-b border-base-200 flex items-center justify-between">
+                  <span>Order Cost Calculation</span>
+                  <span className="badge badge-xs badge-info">Calculated On Backend</span>
+                </div>
+
+                <div className="flex justify-between">
+                  <span className="text-base-content/70">Subtotal ({orderCartItems.reduce((acc, c) => acc + c.quantity, 0)} items):</span>
+                  <span className="font-mono font-semibold">₹{bookingSubtotal.toLocaleString("en-IN")}</span>
+                </div>
+
+                {/* Delivery Charges Breakdown */}
+                <div className="flex justify-between items-center">
+                  <span className="text-base-content/70 flex items-center gap-1.5">
+                    <span>Delivery Charge:</span>
+                    {deliveryRules.enabled ? (
+                      bookingSubtotal < deliveryRules.minPrice ? (
+                        <span className="badge badge-warning badge-xs">
+                          Below ₹{deliveryRules.minPrice} min order
+                        </span>
+                      ) : (
+                        <span className="badge badge-success badge-xs text-white">
+                          Free (≥ ₹{deliveryRules.minPrice})
+                        </span>
+                      )
+                    ) : (
+                      <span className="badge badge-ghost badge-xs">
+                        Disabled (Free)
+                      </span>
+                    )}
+                  </span>
+                  <span className="font-mono font-semibold">
+                    {deliveryRules.fee > 0 ? `₹${deliveryRules.fee}` : "FREE (₹0)"}
+                  </span>
+                </div>
+
+                {/* Coupon Discount */}
+                {appliedCoupon?.discount > 0 && (
+                  <div className="flex justify-between text-success">
+                    <span>Coupon Discount ({appliedCoupon.code}):</span>
+                    <span className="font-mono font-semibold">-₹{appliedCoupon.discount}</span>
+                  </div>
+                )}
+
+                {/* Tax */}
+                <div className="flex justify-between text-base-content/70">
+                  <span>Estimated Tax (GST 18%):</span>
+                  <span className="font-mono font-semibold">
+                    ₹{Math.round(Math.max(0, bookingSubtotal - (appliedCoupon?.discount || 0)) * 0.18)}
+                  </span>
+                </div>
+
+                {/* Grand Total */}
+                <div className="border-t border-base-300 pt-2 flex justify-between items-center font-bold text-sm text-base-content">
+                  <span>Total Payable:</span>
+                  <span className="font-mono text-primary text-base font-extrabold">
+                    ₹{Math.round(
+                      Math.max(0, bookingSubtotal - (appliedCoupon?.discount || 0)) * 1.18 +
+                        deliveryRules.fee
+                    ).toLocaleString("en-IN")}
+                  </span>
+                </div>
+
+                <p className="text-[10px] text-base-content/50 italic pt-1">
+                  * Note: All item prices, delivery charges, coupon validity, and total payable amount are strictly computed and verified on the backend.
+                </p>
+              </div>
+
+              {/* Modal Footer Actions */}
+              <div className="modal-action border-t border-base-200 pt-3 flex items-center justify-end gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setBookModalOpen(false)}
+                  disabled={bookingSubmitting}
+                  className="btn btn-sm btn-ghost"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={bookingSubmitting || orderCartItems.length === 0}
+                  className="btn btn-sm btn-primary min-w-32 shadow-sm"
+                >
+                  {bookingSubmitting ? (
+                    <>
+                      <span className="loading loading-spinner loading-xs" />
+                      <span>Booking...</span>
+                    </>
+                  ) : (
+                    <span>Confirm & Book Order</span>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+          <form method="dialog" className="modal-backdrop">
+            <button onClick={() => setBookModalOpen(false)}>close</button>
           </form>
         </dialog>
       )}

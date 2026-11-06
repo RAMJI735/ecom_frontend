@@ -38,6 +38,8 @@ export default function BannersAndOffersPage() {
     minOrderValue: 500,
     maxDiscount: "",
     isActive: true,
+    limit: 100,
+    expiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
   });
 
   const fetchData = async () => {
@@ -169,6 +171,7 @@ export default function BannersAndOffersPage() {
       return;
     }
     try {
+      const resolvedLimit = Number(couponForm.limit) || 1000;
       await couponService.create({
         code: couponForm.code.trim().toUpperCase(),
         description: couponForm.description.trim(),
@@ -177,6 +180,9 @@ export default function BannersAndOffersPage() {
         minOrderValue: Number(couponForm.minOrderValue) || 0,
         maxDiscount: couponForm.maxDiscount ? Number(couponForm.maxDiscount) : null,
         isActive: couponForm.isActive,
+        limit: resolvedLimit,
+        usageLimit: resolvedLimit,
+        expiryDate: couponForm.expiryDate ? new Date(couponForm.expiryDate) : undefined,
       });
       toast.success("Promo coupon created successfully!");
       setCouponModalOpen(false);
@@ -188,6 +194,8 @@ export default function BannersAndOffersPage() {
         minOrderValue: 500,
         maxDiscount: "",
         isActive: true,
+        limit: 100,
+        expiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
       });
       fetchData();
     } catch (err) {
@@ -386,6 +394,8 @@ export default function BannersAndOffersPage() {
                   <th>Description</th>
                   <th>Discount</th>
                   <th>Min Order</th>
+                  <th>Usage Limit</th>
+                  <th>Expiry Date</th>
                   <th>Status</th>
                   <th className="text-right">Actions</th>
                 </tr>
@@ -393,45 +403,81 @@ export default function BannersAndOffersPage() {
               <tbody>
                 {coupons.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="text-center py-6 text-base-content/60">
+                    <td colSpan={8} className="text-center py-6 text-base-content/60">
                       No active coupon codes created yet.
                     </td>
                   </tr>
                 ) : (
-                  coupons.map((c) => (
-                    <tr key={c._id}>
-                      <td className="font-mono font-bold text-primary">{c.code}</td>
-                      <td className="text-xs max-w-xs">{c.description}</td>
-                      <td className="font-semibold text-xs">
-                        {c.discountType === "percentage"
-                          ? `${c.discountValue}% OFF`
-                          : `₹${c.discountValue} FLAT`}
-                        {c.maxDiscount && (
-                          <span className="block text-[10px] text-base-content/60">
-                            Max: ₹{c.maxDiscount}
+                  coupons.map((c) => {
+                    const isExpired = c.expiryDate && new Date(c.expiryDate) < new Date();
+                    const limitVal = c.limit !== undefined ? c.limit : c.usageLimit;
+                    const isLimitReached = limitVal !== null && limitVal !== undefined && (c.usedCount || 0) >= limitVal;
+
+                    return (
+                      <tr key={c._id}>
+                        <td className="font-mono font-bold text-primary">{c.code}</td>
+                        <td className="text-xs max-w-xs">{c.description}</td>
+                        <td className="font-semibold text-xs">
+                          {c.discountType === "percentage"
+                            ? `${c.discountValue}% OFF`
+                            : `₹${c.discountValue} FLAT`}
+                          {c.maxDiscount && (
+                            <span className="block text-[10px] text-base-content/60">
+                              Max: ₹{c.maxDiscount}
+                            </span>
+                          )}
+                        </td>
+                        <td className="text-xs font-mono">₹{c.minOrderValue || 0}</td>
+                        <td className="text-xs">
+                          <span className="font-mono">
+                            {c.usedCount || 0} / {limitVal || "∞"}
                           </span>
-                        )}
-                      </td>
-                      <td className="text-xs">₹{c.minOrderValue || 0}</td>
-                      <td>
-                        <span
-                          className={`badge badge-xs ${
-                            c.isActive ? "badge-success" : "badge-ghost"
-                          }`}
-                        >
-                          {c.isActive ? "Active" : "Disabled"}
-                        </span>
-                      </td>
-                      <td className="text-right">
-                        <button
-                          onClick={() => handleDeleteCoupon(c._id)}
-                          className="btn btn-ghost btn-xs text-error"
-                        >
-                          Delete
-                        </button>
-                      </td>
-                    </tr>
-                  ))
+                          {isLimitReached && (
+                            <span className="badge badge-error badge-xs ml-1.5 text-[10px]">
+                              Limit Reached
+                            </span>
+                          )}
+                        </td>
+                        <td className="text-xs">
+                          {c.expiryDate ? (
+                            <span className={isExpired ? "text-error font-medium" : ""}>
+                              {new Date(c.expiryDate).toLocaleDateString()}
+                              {isExpired && " (Expired)"}
+                            </span>
+                          ) : (
+                            <span className="text-base-content/50">No Expiry</span>
+                          )}
+                        </td>
+                        <td>
+                          <span
+                            className={`badge badge-xs ${
+                              !c.isActive
+                                ? "badge-ghost opacity-60"
+                                : isExpired || isLimitReached
+                                ? "badge-warning"
+                                : "badge-success"
+                            }`}
+                          >
+                            {!c.isActive
+                              ? "Disabled"
+                              : isExpired
+                              ? "Expired"
+                              : isLimitReached
+                              ? "Exhausted"
+                              : "Active"}
+                          </span>
+                        </td>
+                        <td className="text-right">
+                          <button
+                            onClick={() => handleDeleteCoupon(c._id)}
+                            className="btn btn-ghost btn-xs text-error"
+                          >
+                            Delete
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
@@ -648,6 +694,46 @@ export default function BannersAndOffersPage() {
                     value={couponForm.maxDiscount}
                     onChange={(e) => setCouponForm({ ...couponForm, maxDiscount: e.target.value })}
                   />
+                </div>
+              </div>
+
+              {/* Coupon Limit & Expiry Date */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="form-control">
+                  <label className="label">
+                    <span className="label-text font-semibold">Usage Limit (Limit) *</span>
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    required
+                    placeholder="e.g. 100"
+                    className="input input-bordered w-full font-mono"
+                    value={couponForm.limit}
+                    onChange={(e) => setCouponForm({ ...couponForm, limit: e.target.value })}
+                  />
+                  <label className="label py-0.5">
+                    <span className="label-text-alt text-base-content/60">
+                      Total times this coupon can be used
+                    </span>
+                  </label>
+                </div>
+                <div className="form-control">
+                  <label className="label">
+                    <span className="label-text font-semibold">Expiry Date *</span>
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    className="input input-bordered w-full font-mono"
+                    value={couponForm.expiryDate}
+                    onChange={(e) => setCouponForm({ ...couponForm, expiryDate: e.target.value })}
+                  />
+                  <label className="label py-0.5">
+                    <span className="label-text-alt text-base-content/60">
+                      Coupon will expire after this date
+                    </span>
+                  </label>
                 </div>
               </div>
 
