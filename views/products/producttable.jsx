@@ -18,6 +18,8 @@ export default function ProductTable({
   onDelete,
   onToggleStatus,
   onAddNew,
+  gstType = "exclusive",
+  taxRate = 18,
 }) {
   const [copiedSku, setCopiedSku] = useState(null);
 
@@ -248,6 +250,13 @@ export default function ProductTable({
                         ₹{Number(item.originalPrice).toLocaleString("en-IN")}
                       </div>
                     )}
+                    <div className="text-[10px] font-sans">
+                      {gstType === "inclusive" ? (
+                        <span className="text-success font-medium">Incl. GST</span>
+                      ) : (
+                        <span className="text-base-content/60">+{taxRate}% GST</span>
+                      )}
+                    </div>
                   </td>
 
                   {/* Stock Level & Status */}

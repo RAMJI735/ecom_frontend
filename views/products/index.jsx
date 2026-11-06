@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import toast from "react-hot-toast";
 import { productService } from "../../service/product/productService";
 import { categoryService } from "../../service/category/categoryService";
+import { settingsService } from "../../service/settings/settingsService";
 import ProductTable from "./producttable";
 import AddProductModal from "./addmodal";
 
@@ -29,6 +30,11 @@ export default function ProductsView() {
   const [stockFilter, setStockFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [sortBy, setSortBy] = useState("newest");
+  const [storeSettings, setStoreSettings] = useState(null);
+
+  useEffect(() => {
+    settingsService.get().then((data) => data && setStoreSettings(data)).catch(() => {});
+  }, []);
 
   // Global KPI summary stats across entire catalog
   const [overviewStats, setOverviewStats] = useState({
@@ -564,6 +570,8 @@ export default function ProductsView() {
         page={page}
         limit={limit}
         totalPages={totalPages}
+        gstType={storeSettings?.gstType || storeSettings?.commerce?.gstType || "exclusive"}
+        taxRate={storeSettings?.commerce?.taxRate ?? 18}
         onPageChange={setPage}
         onLimitChange={handleLimitChange}
         onEdit={(item) => {

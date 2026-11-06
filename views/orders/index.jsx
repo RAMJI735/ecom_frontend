@@ -1017,9 +1017,14 @@ export default function OrdersView({
                     </span>
                   </div>
                   <div className="flex justify-between text-base-content/70">
-                    <span>Estimated Tax (GST):</span>
+                    <span>
+                      Estimated Tax (GST{selectedOrder.summary?.gstType ? ` - ${selectedOrder.summary.gstType}` : ""}):
+                    </span>
                     <span className="font-mono font-medium">
                       ₹{(selectedOrder.summary?.tax || 0).toLocaleString("en-IN")}
+                      {selectedOrder.summary?.gstType === "inclusive" && (
+                        <span className="text-xs text-success ml-1 font-normal">(Included)</span>
+                      )}
                     </span>
                   </div>
                   {selectedOrder.summary?.discount > 0 && (
@@ -1376,24 +1381,47 @@ export default function OrdersView({
                   </div>
                 )}
 
-                {/* Tax */}
-                <div className="flex justify-between text-base-content/70">
-                  <span>Estimated Tax (GST 18%):</span>
-                  <span className="font-mono font-semibold">
-                    ₹{Math.round(Math.max(0, bookingSubtotal - (appliedCoupon?.discount || 0)) * 0.18)}
-                  </span>
-                </div>
+                {/* Tax & Grand Total based on gstType */}
+                {(() => {
+                  const gstType = storeSettings?.gstType || storeSettings?.commerce?.gstType || "exclusive";
+                  const taxRate = storeSettings?.commerce?.taxRate ?? 18;
+                  const taxable = Math.max(0, bookingSubtotal - (appliedCoupon?.discount || 0));
+                  let taxAmt = 0;
+                  let finalPayable = 0;
 
-                {/* Grand Total */}
-                <div className="border-t border-base-300 pt-2 flex justify-between items-center font-bold text-sm text-base-content">
-                  <span>Total Payable:</span>
-                  <span className="font-mono text-primary text-base font-extrabold">
-                    ₹{Math.round(
-                      Math.max(0, bookingSubtotal - (appliedCoupon?.discount || 0)) * 1.18 +
-                        deliveryRules.fee
-                    ).toLocaleString("en-IN")}
-                  </span>
-                </div>
+                  if (gstType === "inclusive") {
+                    const base = taxable / (1 + taxRate / 100);
+                    taxAmt = Math.round((taxable - base) * 100) / 100;
+                    finalPayable = Math.round(taxable + deliveryRules.fee);
+                  } else {
+                    taxAmt = Math.round((taxable * (taxRate / 100)) * 100) / 100;
+                    finalPayable = Math.round(taxable + taxAmt + deliveryRules.fee);
+                  }
+
+                  return (
+                    <>
+                      <div className="flex justify-between text-base-content/70">
+                        <span>
+                          Estimated Tax (GST {taxRate}% {gstType === "inclusive" ? "included" : "added"}):
+                        </span>
+                        <span className="font-mono font-semibold">
+                          ₹{taxAmt}
+                          {gstType === "inclusive" && (
+                            <span className="text-[11px] text-success ml-1 font-normal font-sans">(Included)</span>
+                          )}
+                        </span>
+                      </div>
+
+                      {/* Grand Total */}
+                      <div className="border-t border-base-300 pt-2 flex justify-between items-center font-bold text-sm text-base-content">
+                        <span>Total Payable:</span>
+                        <span className="font-mono text-primary text-base font-extrabold">
+                          ₹{finalPayable.toLocaleString("en-IN")}
+                        </span>
+                      </div>
+                    </>
+                  );
+                })()}
 
                 <p className="text-[10px] text-base-content/50 italic pt-1">
                   * Note: All item prices, delivery charges, coupon validity, and total payable amount are strictly computed and verified on the backend.

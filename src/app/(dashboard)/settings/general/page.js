@@ -10,6 +10,7 @@ export default function GeneralSettingsPage() {
 
   const [currency, setCurrency] = useState("INR");
   const [taxRate, setTaxRate] = useState(18);
+  const [gstType, setGstType] = useState("exclusive");
 
   // Delivery Cost & Threshold Settings
   const [deliveryCharges, setDeliveryCharges] = useState(false);
@@ -51,6 +52,12 @@ export default function GeneralSettingsPage() {
           if (data.commerce) {
             setCurrency(data.commerce.currency || "INR");
             setTaxRate(data.commerce.taxRate ?? 18);
+            if (data.commerce.gstType) {
+              setGstType(data.commerce.gstType);
+            }
+          }
+          if (data.gstType) {
+            setGstType(data.gstType);
           }
           if (data.announcement) {
             setAnnouncementText(data.announcement.text || "");
@@ -79,6 +86,7 @@ export default function GeneralSettingsPage() {
         deliveryCharges,
         minPrice: Number(minPrice),
         delivery_cost: Number(deliveryCost),
+        gstType,
         commerce: {
           deliveryCharges,
           minPrice: Number(minPrice),
@@ -87,6 +95,7 @@ export default function GeneralSettingsPage() {
           standardDeliveryFee: Number(deliveryCost),
           currency,
           taxRate: Number(taxRate),
+          gstType,
           currencySymbol: currency === "INR" ? "₹" : currency === "USD" ? "$" : currency === "EUR" ? "€" : "£",
         },
         announcement: {
@@ -161,6 +170,95 @@ export default function GeneralSettingsPage() {
                   value={taxRate}
                   onChange={(e) => setTaxRate(e.target.value)}
                 />
+              </div>
+            </div>
+
+            {/* GST Pricing Mode: Inclusive vs Exclusive */}
+            <div className="mt-4 p-4 rounded-xl bg-base-200/60 border border-base-300 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="font-semibold text-sm text-base-content flex items-center gap-2">
+                    <span>🧾 GST Pricing Mode</span>
+                    <span className={`badge badge-sm font-semibold ${gstType === "inclusive" ? "badge-success text-white" : "badge-primary text-white"}`}>
+                      {gstType === "inclusive" ? "GST Inclusive" : "GST Exclusive"}
+                    </span>
+                  </h4>
+                  <p className="text-xs text-base-content/70 mt-0.5">
+                    Choose whether catalog prices are shown inclusive of GST or if GST ({taxRate}%) is added on top at checkout.
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                <label
+                  className={`border rounded-xl p-3 flex items-start gap-3 cursor-pointer transition ${
+                    gstType === "exclusive"
+                      ? "border-primary bg-primary/10 shadow-xs"
+                      : "border-base-300 hover:bg-base-200"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="gstType"
+                    value="exclusive"
+                    checked={gstType === "exclusive"}
+                    onChange={() => setGstType("exclusive")}
+                    className="radio radio-primary radio-sm mt-0.5"
+                  />
+                  <div>
+                    <div className="font-semibold text-xs text-base-content flex items-center gap-2">
+                      <span>GST Exclusive (Tax Added at Checkout)</span>
+                    </div>
+                    <p className="text-[11px] text-base-content/70 mt-1 leading-relaxed">
+                      Catalog prices show base amount. Extra <strong>+{taxRate}% GST</strong> is added to the customer total at checkout.
+                    </p>
+                    <span className="inline-block mt-2 text-[10px] bg-base-100 border border-base-300 rounded px-2 py-0.5 font-mono text-base-content/80">
+                      Tag: +{taxRate}% GST
+                    </span>
+                  </div>
+                </label>
+
+                <label
+                  className={`border rounded-xl p-3 flex items-start gap-3 cursor-pointer transition ${
+                    gstType === "inclusive"
+                      ? "border-success bg-success/10 shadow-xs"
+                      : "border-base-300 hover:bg-base-200"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="gstType"
+                    value="inclusive"
+                    checked={gstType === "inclusive"}
+                    onChange={() => setGstType("inclusive")}
+                    className="radio radio-success radio-sm mt-0.5"
+                  />
+                  <div>
+                    <div className="font-semibold text-xs text-base-content flex items-center gap-2">
+                      <span>GST Inclusive (All Taxes Included in Price)</span>
+                    </div>
+                    <p className="text-[11px] text-base-content/70 mt-1 leading-relaxed">
+                      Catalog prices already include <strong>{taxRate}% GST</strong>. Tax is itemized for invoice records without adding extra charges.
+                    </p>
+                    <span className="inline-block mt-2 text-[10px] bg-base-100 border border-base-300 rounded px-2 py-0.5 font-mono text-success font-medium">
+                      Tag: Incl. {taxRate}% GST
+                    </span>
+                  </div>
+                </label>
+              </div>
+
+              {/* Live Preview Box */}
+              <div className="p-2.5 rounded-lg bg-base-100 border border-base-300 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2 font-mono">
+                <span className="text-base-content/70">Example for ₹1,000 product:</span>
+                {gstType === "inclusive" ? (
+                  <span className="text-success">
+                    Shown: <strong>₹1,000 (Incl. {taxRate}% GST)</strong> → Base: ₹{(1000 / (1 + Number(taxRate) / 100)).toFixed(2)} + GST: ₹{(1000 - 1000 / (1 + Number(taxRate) / 100)).toFixed(2)} = <strong>Payable: ₹1,000</strong>
+                  </span>
+                ) : (
+                  <span className="text-primary">
+                    Shown: <strong>₹1,000 (+ {taxRate}% GST)</strong> → Base: ₹1,000 + GST: ₹{(1000 * (Number(taxRate) / 100)).toFixed(2)} = <strong>Payable: ₹{(1000 * (1 + Number(taxRate) / 100)).toFixed(2)}</strong>
+                  </span>
+                )}
               </div>
             </div>
           </div>
